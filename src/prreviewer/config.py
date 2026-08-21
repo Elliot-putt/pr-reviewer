@@ -1,8 +1,8 @@
 """Application configuration loaded from environment / .env file."""
 
-from pathlib import Path
-
 from pydantic_settings import BaseSettings
+
+from prreviewer.paths import env_path
 
 
 class Settings(BaseSettings):
@@ -25,5 +25,5 @@ class Settings(BaseSettings):
     ui_port: int = 8765
 
     # Absolute path so settings load correctly no matter which directory the
-    # app is launched from (must match _ENV_PATH in ui/window.py).
-    model_config = {"env_file": str(Path(__file__).parents[2] / ".env")}
+    # app is launched from; paths.env_path() also handles the bundled .app.
+    model_config = {"env_file": str(env_path())}

@@ -25,6 +25,9 @@ def main() -> None:
     import time as _time
     _startup_time = _time.time()
 
+    from prreviewer.paths import asset_dir as _asset_dir, fix_path_env
+    fix_path_env()  # Finder-launched apps lack /opt/homebrew/bin on PATH
+
     from prreviewer.config import Settings
     from prreviewer.core.events import EventBus, PRDetected, PRUpdated
     from prreviewer.core.store import PRStore
@@ -48,8 +51,7 @@ def main() -> None:
     review_publisher = ReviewPublisher(github_client)
     git_repo = GitRepo(settings)
 
-    asset_dir = Path(__file__).parent / "src" / "prreviewer" / "ui" / "assets"
-    ui_server = UiServer(port=settings.ui_port, asset_dir=asset_dir)
+    ui_server = UiServer(port=settings.ui_port, asset_dir=_asset_dir())
     ui_server.run_in_thread()
 
     for _ in range(20):

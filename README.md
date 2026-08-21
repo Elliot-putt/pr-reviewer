@@ -23,7 +23,15 @@ For **your own PRs**, a background poller watches for new unresolved review comm
 - `terminal-notifier` for Mac notifications (`brew install terminal-notifier`)
 - Local clones of the repos you review, all in one folder (e.g. `~/code/<repo-name>` — folder names must match the GitHub repo names exactly)
 
-## Setup
+## Install (Mac app — recommended)
+
+1. Download the latest `PR-Reviewer-x.y.z.dmg` from [Releases](https://github.com/Elliot-putt/pr-reviewer/releases).
+2. Open it and drag **PR Reviewer** into **Applications**, then launch it from Launchpad / Spotlight and pin it to your Dock.
+3. First launch only: the app is unsigned, so macOS will warn you. **Right-click the app → Open → Open** (or `xattr -dc "/Applications/PR Reviewer.app"`).
+
+The app stores its config in `~/Library/Application Support/PR Reviewer/.env` — use the in-app Settings page to fill everything in. You still need the [Requirements](#requirements) below installed (`claude`, `terminal-notifier`, local clones).
+
+## Run from source (alternative)
 
 ```bash
 git clone https://github.com/Elliot-putt/pr-reviewer.git
@@ -65,14 +73,13 @@ Reviews run whatever slash-command skill you configure (default `/code-review`).
 
 ## Updating
 
-The app checks GitHub releases on launch (and every 6 hours). When a newer version exists you'll see a banner — then:
+The app checks GitHub releases on launch (and every 6 hours). When a newer version exists you'll see a banner linking to the release:
 
-```bash
-git pull && uv run main.py
-```
+- **Mac app**: download the new DMG and drag it into Applications again (your settings live in Application Support and survive).
+- **From source**: `git pull && uv run main.py`.
 
 ## Contributing / releasing
 
 - Branch off `main`, open a PR, merge when green.
-- To ship a release: bump `__version__` in `src/prreviewer/version.py` in your PR. On merge to `main`, GitHub Actions automatically tags `v<version>` and publishes a release with generated notes. Everyone's app picks it up via the update banner.
+- To ship a release: bump `__version__` in `src/prreviewer/version.py` in your PR. On merge to `main`, GitHub Actions automatically tags `v<version>`, publishes a release with generated notes, and builds + attaches the Mac app (DMG and zip, Apple Silicon). Everyone's app picks it up via the update banner.
 - No version bump → merge publishes nothing (safe for docs/refactor PRs).

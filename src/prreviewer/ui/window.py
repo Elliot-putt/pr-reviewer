@@ -22,8 +22,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Absolute path to the .env file, resolved once at import time relative to main.py
-_ENV_PATH = Path(__file__).parents[3] / ".env"
+from prreviewer.paths import env_path
+
+# Absolute path to the .env file (repo root, or Application Support when bundled)
+_ENV_PATH = env_path()
 
 
 def _read_env(path: Path) -> dict[str, str]:
