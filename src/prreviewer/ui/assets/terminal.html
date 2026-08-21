@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #0d0f14; overflow: hidden; }
+    #terminal { width: 100%; height: 100%; }
+    .xterm { padding: 4px; }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const prId   = params.get('prId')   || '';
+      const wsPort = params.get('wsPort') || '8766';
+
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        theme: {
+          background: '#0d0f14',
+          foreground: '#e2e8f0',
+          cursor: '#7dd3fc',
+          selectionBackground: '#5359EA44',
+        },
+        convertEol: true,
+      });
+
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+
+      const container = document.getElementById('terminal');
+      term.open(container);
+
+      function fit() {
+        try { fitAddon.fit(); } catch (e) {}
+      }
+
+      // Initial fit after a frame to let the browser settle layout
+      requestAnimationFrame(() => { fit(); openWs(); });
+
+      let ws;
+
+      function openWs() {
+        ws = new WebSocket(`ws://127.0.0.1:${wsPort}/terminal/${prId}`);
+
+        ws.onopen = () => {
+          fit();
+          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+        };
+
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'data') {
+              const bin = atob(msg.data);
+              const bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              term.write(bytes);
+            }
+          } catch (e) {}
+        };
+
+        ws.onerror = () => term.write('\r\n\x1b[31m[Connection error]\x1b[0m\r\n');
+        ws.onclose = () => term.write('\r\n\x1b[90m[Session closed]\x1b[0m\r\n');
+      }
+
+      term.onData(data => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'input', data: btoa(data) }));
+        }
+      });
+
+      const ro = new ResizeObserver(() => {
+        fit();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+        }
+      });
+      ro.observe(container);
+    })();
+  </script>
+</body>
+</html>

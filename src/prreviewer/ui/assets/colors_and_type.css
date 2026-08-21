@@ -1,0 +1,245 @@
+/* ==========================================================================
+   Spectre Design System — Colors & Type
+   Source: spectre-ui v2.0.0-beta.3 (@agentsoftware/spectre-ui)
+   ========================================================================== */
+
+/* ---------- Fonts ---------------------------------------------------------- */
+/* Primary sans: Inter (variable). Heading/display: Gilmer. */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-VariableFont.ttf') format('truetype-variations'),
+       url('./fonts/Inter-Regular.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-Italic-VariableFont.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  src: url('./fonts/Gilmer-Light.otf') format('opentype'),
+       url('./fonts/gilmer-light-webfont.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  src: url('./fonts/Gilmer-Regular.otf') format('opentype'),
+       url('./fonts/gilmer-regular-webfont.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  src: url('./fonts/Gilmer-Medium.otf') format('opentype'),
+       url('./fonts/gilmer-medium-webfont.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  src: url('./fonts/Gilmer-Bold.otf') format('opentype'),
+       url('./fonts/gilmer-bold-webfont.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer';
+  src: url('./fonts/Gilmer-Heavy.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Gilmer Outline';
+  src: url('./fonts/Gilmer-Outline.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- Tokens --------------------------------------------------------- */
+:root {
+  /* --- Font families --- */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --font-gilmer: 'Gilmer', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Gilmer', ui-sans-serif, system-ui, sans-serif;
+
+  /* --- Brand --- */
+  --color-spectre-purple: #1f0b38;   /* Nav & dark surfaces */
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* --- Primary (Spectre indigo) --- */
+  --color-primary-50:  #eff2f8;
+  --color-primary-100: #e2e8f9;
+  --color-primary-200: #c4d1fb;
+  --color-primary-300: #a8b4f2;
+  --color-primary-400: #8090ef;
+  --color-primary-500: #6a6fec;
+  --color-primary-600: #5359ea;
+  --color-primary-700: #4246ca;
+  --color-primary-800: #3135aa;
+  --color-primary-900: #24278b;
+  --color-primary-950: #1e1b4b;
+
+  /* --- Default / neutral (cool gray) --- */
+  --color-default-50:  #f9fafb;
+  --color-default-100: #f3f4f6;
+  --color-default-200: #e5e7eb;
+  --color-default-300: #d1d5db;
+  --color-default-400: #9ca3af;
+  --color-default-500: #6b7280;
+  --color-default-600: #4b5563;
+  --color-default-700: #374151;
+  --color-default-800: #1f2937;
+  --color-default-900: #111827;
+  --color-default-950: #030712;
+
+  /* --- Semantic (Tailwind defaults, used in Alert / Badge) --- */
+  --color-red-50: #fef2f2;     --color-red-400: #f87171;  --color-red-600: #dc2626;  --color-red-700: #b91c1c;  --color-red-800: #991b1b;
+  --color-green-50: #f0fdf4;   --color-green-400: #4ade80; --color-green-600: #16a34a; --color-green-700: #15803d;
+  --color-blue-50: #eff6ff;    --color-blue-400: #60a5fa; --color-blue-600: #2563eb; --color-blue-700: #1d4ed8;
+  --color-yellow-50: #fefce8;  --color-yellow-400: #facc15; --color-yellow-600: #ca8a04; --color-yellow-800: #854d0e;
+  --color-orange-50: #fff7ed;  --color-orange-600: #ea580c; --color-orange-700: #c2410c;
+  --color-purple-50: #faf5ff;  --color-purple-600: #9333ea; --color-purple-700: #7e22ce;
+  --color-pink-50: #fdf2f8;    --color-pink-600: #db2777;  --color-pink-700: #be185d;
+
+  /* --- AI gradient --- */
+  --gradient-ai: linear-gradient(90deg, #942aa9, #2b4dd0);
+
+  /* --- Semantic color roles --- */
+  --color-fg:           var(--color-default-900); /* text primary */
+  --color-fg-secondary: var(--color-default-500); /* text secondary / muted */
+  --color-fg-tertiary:  var(--color-default-700);
+  --color-fg-on-dark:   var(--color-white);
+  --color-fg-disabled:  var(--color-default-400);
+  --color-fg-accent:    var(--color-primary-600);
+
+  --color-bg:           var(--color-white);
+  --color-bg-muted:     var(--color-default-50);
+  --color-bg-sunken:    var(--color-default-100);
+  --color-bg-inverse:   var(--color-spectre-purple);
+
+  --color-border:       var(--color-default-200);
+  --color-border-strong:var(--color-default-300);
+  --color-focus-ring:   var(--color-primary-900);
+
+  /* --- Spacing (Tailwind-style tokens from index.css) --- */
+  --spacing-tiny:  2px;
+  --spacing-xxs:   4px;
+  --spacing-xs:    6px;
+  --spacing-sm:    8px;
+  --spacing-md:    12px;
+  --spacing-base:  16px;
+  --spacing-lg:    24px;
+  --spacing-xl:    32px;
+  --spacing-xxl:   40px;
+  --spacing-huge:  48px;
+
+  /* --- Radii (Tailwind rounded-* used across components) --- */
+  --radius-sm:   2px;   /* sm btn */
+  --radius-md:   6px;   /* base btn, badge, alert */
+  --radius-lg:   8px;   /* card */
+  --radius-xl:   12px;
+  --radius-full: 9999px;
+
+  /* --- Shadows (from Tailwind; shadow-xs used on buttons, shadow on cards) --- */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow:    0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-ring: inset 0 0 0 1px rgb(0 0 0 / 0.05);
+
+  /* --- Type scale (Tailwind text-* sizes) --- */
+  --text-xs:   12px;  --lh-xs:  16px;
+  --text-sm:   14px;  --lh-sm:  20px;
+  --text-base: 16px;  --lh-base:24px;
+  --text-lg:   18px;  --lh-lg:  28px;
+  --text-xl:   20px;  --lh-xl:  28px;
+  --text-2xl:  24px;  --lh-2xl: 32px;
+  --text-3xl:  30px;  --lh-3xl: 36px;
+  --text-4xl:  36px;  --lh-4xl: 40px;
+  --text-5xl:  48px;  --lh-5xl: 48px;
+  --text-6xl:  60px;  --lh-6xl: 60px;
+
+  /* --- Durations / easing --- */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+}
+
+/* ---------- Base element defaults ----------------------------------------- */
+html, body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--lh-base);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- Semantic type classes ----------------------------------------- */
+/* Headings always use Gilmer + medium. Body uses Inter. */
+
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6,
+.heading {
+  font-family: var(--font-gilmer);
+  font-weight: 500;
+  color: var(--color-fg);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.display, h1, .h1 { font-size: var(--text-5xl); line-height: var(--lh-5xl); letter-spacing: -0.02em; }
+h2, .h2          { font-size: var(--text-4xl); line-height: var(--lh-4xl); letter-spacing: -0.02em; }
+h3, .h3          { font-size: var(--text-3xl); line-height: var(--lh-3xl); }
+h4, .h4          { font-size: var(--text-2xl); line-height: var(--lh-2xl); }
+h5, .h5          { font-size: var(--text-xl);  line-height: var(--lh-xl); }
+h6, .h6          { font-size: var(--text-lg);  line-height: var(--lh-lg); }
+
+p, .text-body    { font-family: var(--font-sans); font-size: var(--text-sm); line-height: var(--lh-sm); color: var(--color-fg); }
+.text-lead       { font-size: var(--text-base); line-height: var(--lh-base); color: var(--color-fg); }
+.text-secondary  { color: var(--color-fg-secondary); }
+.text-tertiary   { color: var(--color-fg-tertiary); }
+.text-xs         { font-size: var(--text-xs);  line-height: var(--lh-xs); }
+.text-sm         { font-size: var(--text-sm);  line-height: var(--lh-sm); }
+.text-lg         { font-size: var(--text-lg);  line-height: var(--lh-lg); }
+.eyebrow         { font-family: var(--font-sans); font-size: 11px; line-height: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-fg-secondary); font-weight: 600; }
+
+a { color: var(--color-primary-600); text-decoration: none; }
+a:hover { color: var(--color-primary-700); text-decoration: underline; }
+
+kbd {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--color-default-200);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--color-default-400);
+}
+
+code, .code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.9em;
+}

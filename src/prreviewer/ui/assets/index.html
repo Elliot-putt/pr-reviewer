@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review — PR auto-review</title>
+  <link rel="stylesheet" href="colors_and_type.css">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <!-- Capture xterm's Terminal NOW before any app script shadows the global name -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script>window.__XTerm = window.Terminal; window.__XFitAddon = window.FitAddon;</script>
+  <script>
+    // Spectre mark, inlined so it can recolour via currentColor in JS-rendered spots.
+    window.SPECTRE_MARK = '<svg viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M16.3232 11.5055C16.7293 11.567 17.15 11.6308 17.589 11.7344H17.5849C20.2485 12.3647 22.182 14.6664 22.182 17.2079C22.182 19.2289 21.0113 21.1158 19.1227 22.1324C18.1804 22.6407 17.1036 22.9091 16.0022 22.9091C12.5921 22.9091 9.81836 20.3513 9.81836 17.2079H13.3508C13.3508 18.4116 14.5419 19.3916 16.0063 19.3916C16.5203 19.3916 17.0179 19.2696 17.4462 19.0378C18.2049 18.6312 18.6577 17.9439 18.6577 17.2079C18.6577 16.1669 17.6909 15.3739 16.7772 15.1584C16.5045 15.0922 16.2048 15.0469 15.891 14.9994C15.8387 14.9915 15.786 14.9835 15.733 14.9754C15.2598 14.9063 14.7744 14.8331 14.2605 14.703C11.7722 14.0726 10.0345 11.9378 10.0345 9.51413C10.0345 6.47648 12.7104 4.00407 15.9981 4C17.0465 4 18.0785 4.25212 18.9799 4.73196C20.8237 5.71198 21.9699 7.5419 21.9699 9.51007H18.4415C18.4415 8.8391 18.0214 8.21286 17.3198 7.83875C16.9282 7.62729 16.4713 7.5175 16.0022 7.5175C14.6561 7.5175 13.5629 8.41212 13.5629 9.51007C13.5629 10.4616 14.3747 11.1001 15.1293 11.2912C15.4534 11.3729 15.8185 11.4286 16.1998 11.4867C16.2168 11.4893 16.2339 11.4919 16.251 11.4945C16.2751 11.4982 16.2991 11.5018 16.3232 11.5055ZM21.4547 24.3636V28H12.5433L10.5456 24.3636H21.4547Z"></path></svg>';
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="icons.jsx"></script>
+  <script type="text/babel" src="app-data.jsx"></script>
+  <script type="text/babel" src="app-ui.jsx"></script>
+  <script type="text/babel" src="app-workspace.jsx"></script>
+  <script type="text/babel" src="app-settings.jsx"></script>
+  <script type="text/babel" src="app-main.jsx"></script>
+  <script type="text/babel" src="app-bridge.jsx"></script>
+
+  <!-- xterm.js terminal lifecycle -->
+  <script>
+  window.__xtermInstances = {};
+
+  window.__mountXterm = function(containerId, prId, wsPort) {
+    if (window.__xtermInstances[prId]) return;
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var XTermClass = window.__XTerm;
+    var XFitAddon = window.__XFitAddon;
+    if (!XTermClass || !XFitAddon) return;
+    var term = new XTermClass({ cursorBlink: true, fontSize: 13,
+      fontFamily: '"JetBrains Mono","Fira Code",monospace',
+      theme: { background:'#0d0f14', foreground:'#e2e8f0', cursor:'#7dd3fc', selectionBackground:'#5359EA44' },
+      convertEol: true });
+    var fitAddon = new XFitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(container);
+    setTimeout(function() {
+      fitAddon.fit();
+      var ws = new WebSocket('ws://127.0.0.1:' + wsPort + '/terminal/' + prId);
+      ws.onopen = function() { fitAddon.fit(); ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows})); };
+      ws.onmessage = function(ev) { try { var m=JSON.parse(ev.data); if(m.type==='data'){ var b=atob(m.data),u=new Uint8Array(b.length); for(var i=0;i<b.length;i++) u[i]=b.charCodeAt(i); term.write(u); } } catch(e){} };
+      ws.onerror = function() { term.write('\r\n\x1b[31m[Connection error]\x1b[0m\r\n'); };
+      ws.onclose = function() { term.write('\r\n\x1b[90m[Session closed]\x1b[0m\r\n'); };
+      term.onData(function(d) { if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'input',data:btoa(d)})); });
+      var ro = new ResizeObserver(function() { try { fitAddon.fit(); if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows})); } catch(e){} });
+      ro.observe(container);
+      window.__xtermInstances[prId] = { term: term, ws: ws, ro: ro };
+    }, 150);
+  };
+
+  window.__destroyXterm = function(prId) {
+    var inst = window.__xtermInstances[prId];
+    if (!inst) return;
+    inst.ro.disconnect(); inst.ws.close(); inst.term.dispose();
+    delete window.__xtermInstances[prId];
+  };
+  </script>
+
+  <!-- Python bridge integration -->
+  <script>
+  // ---------------------------------------------------------------------------
+  // Python API bridge helpers (safe no-ops when pywebview is absent)
+  // ---------------------------------------------------------------------------
+  window.__pyApi = {
+    startReview: function(prId) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.start_review(prId);
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    postReview: function(prId, commentIds, decision) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.post_review(prId, commentIds, decision);
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    approvePr: function(prId) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.approve_pr(prId);
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    markReviewed: function(prId) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.mark_reviewed(prId);
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    getPrs: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.get_prs();
+      }
+      return Promise.resolve([]);
+    },
+    getSettings: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.get_settings();
+      }
+      return Promise.resolve({ slackConnected: false, githubConnected: false, wsPort: 8766, isConfigured: false });
+    },
+    saveSettings: function(data) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.save_settings(data);
+      }
+      return Promise.resolve({ ok: false });
+    },
+    listSlackChannels: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.list_slack_channels();
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    pickFolder: function(initial) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.pick_folder(initial || "");
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    connectSlack: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.connect_slack();
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
+    disconnectSlack: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.disconnect_slack();
+      }
+      return Promise.resolve({ ok: true });
+    },
+  };
+
+  // Forward Python-pushed events into the app
+  ['settings-updated', 'backfill-start', 'backfill-done'].forEach(name => {
+    window.addEventListener(name, (e) => {
+      window.__appEventBus && window.__appEventBus.dispatchEvent(
+        new CustomEvent(name, { detail: e.detail })
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // App-level event bridge: Python → React
+  // Dispatched by Python via window.dispatchEvent(new CustomEvent(...))
+  // ---------------------------------------------------------------------------
+  window.__appEventBus = new EventTarget();
+
+  window.addEventListener('pr-detected', (e) => {
+    window.__appEventBus.dispatchEvent(new CustomEvent('pr-detected', { detail: e.detail }));
+  });
+
+  window.addEventListener('pr-updated', (e) => {
+    window.__appEventBus.dispatchEvent(new CustomEvent('pr-updated', { detail: e.detail }));
+  });
+  </script>
+</body>
+</html>
