@@ -453,6 +453,15 @@ class AppWindow:
             logger.exception("pick_folder failed.")
             return {"ok": False, "error": str(exc)}
 
+    def check_updates(self) -> dict:
+        """Check GitHub for a newer release right now (user-triggered)."""
+        from prreviewer.paths import is_frozen
+        from prreviewer.version import __version__, check_for_update
+        info = check_for_update()
+        if info:
+            info["canSelfUpdate"] = bool(is_frozen() and info.get("zipUrl"))
+        return {"ok": True, "current": __version__, "update": info}
+
     def install_update(self, zip_url: str) -> dict:
         """Download a release zip, replace this .app bundle, and relaunch.
 

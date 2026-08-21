@@ -117,6 +117,7 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
   const [nativeNotifications, setNativeNotifications] = useStateS(true);
   const origFields = useRefS({});  // last-loaded values, to detect edited token masks
   const [appVersion, setAppVersion] = useStateS("");
+  const [updCheck, setUpdCheck] = useStateS(null);  // null | "checking" | "latest" | "error"
 
   function applyConfig(cfg) {
     if (!cfg) return;
@@ -502,7 +503,34 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
               ? <span style={{color:"var(--color-red-600)"}}>{saveErr || "Save failed"}</span>
               : <>Changes are written to your <span className="mono">.env</span> file</>}
           </span>
-          {appVersion && <span className="setsec__version mono">v{appVersion}</span>}
+          <span className="setsec__updchk">
+            {appVersion && <span className="setsec__version mono">v{appVersion}</span>}
+            <button
+              className="btn secondary sm"
+              disabled={updCheck === "checking"}
+              onClick={() => {
+                setUpdCheck("checking");
+                window.__pyApi.checkUpdates().then(res => {
+                  if (res && res.ok && res.update) {
+                    setUpdCheck(null);
+                    // Reuse the global update banner (with its Update now button)
+                    window.dispatchEvent(new CustomEvent("update-available", { detail: res.update }));
+                  } else if (res && res.ok) {
+                    setUpdCheck("latest");
+                    setTimeout(() => setUpdCheck(null), 4000);
+                  } else {
+                    setUpdCheck("error");
+                    setTimeout(() => setUpdCheck(null), 4000);
+                  }
+                }).catch(() => { setUpdCheck("error"); setTimeout(() => setUpdCheck(null), 4000); });
+              }}
+            >
+              {updCheck === "checking" ? <><Spinner size={12} /> Checking…</>
+                : updCheck === "latest" ? <><Icon name="check" /> Up to date</>
+                : updCheck === "error" ? "Check failed"
+                : "Check for updates"}
+            </button>
+          </span>
         </div>
 
       </div>

@@ -119,6 +119,12 @@
       }
       return Promise.resolve({ ok: false });
     },
+    checkUpdates: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.check_updates();
+      }
+      return Promise.resolve({ ok: false });
+    },
     listSlackChannels: function() {
       if (window.pywebview && window.pywebview.api) {
         return window.pywebview.api.list_slack_channels();
