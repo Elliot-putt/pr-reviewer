@@ -26,6 +26,8 @@ class PtySession:
 
     def start(self, dimensions: tuple[int, int] = (40, 220), initial_prompt: str = "") -> None:
         """Spawn the process in a PTY and begin the read loop."""
+        import os
+
         import ptyprocess
 
         cmd = [self._bin, "--dangerously-skip-permissions"]
@@ -33,10 +35,17 @@ class PtySession:
             cmd += ["--model", self._model]
         if initial_prompt:
             cmd.append(initial_prompt)
+        # The bundled .app is launched by Finder with a minimal environment —
+        # without TERM/LANG, claude renders colorless with broken box glyphs.
+        env = {**os.environ}
+        env.setdefault("TERM", "xterm-256color")
+        env.setdefault("COLORTERM", "truecolor")
+        env.setdefault("LANG", "en_US.UTF-8")
         self._proc = ptyprocess.PtyProcess.spawn(
             cmd,
             cwd=self._cwd,
             dimensions=dimensions,
+            env=env,
         )
         thread = threading.Thread(target=self._read_loop, daemon=True, name=f"pty-reader-{id(self)}")
         thread.start()

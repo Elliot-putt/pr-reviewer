@@ -15,7 +15,10 @@ function makeFilters(githubLogin) {
     { id: "to_review",       label: "To Review",        tooltip: "PRs from others waiting for your code review",
       match: p => (!githubLogin || p.author !== githubLogin) && ["waiting", "checkout", "reviewing"].includes(p.status) },
     { id: "needs_attention", label: "Needs Attention",  tooltip: "Your PRs with unresolved review comments",
-      match: p => p.status === "needs_attention" },
+      // Keep your own PRs visible here while comments are being addressed —
+      // starting the session moves status to checkout/reviewing.
+      match: p => p.status === "needs_attention"
+        || (!!githubLogin && p.author === githubLogin && ["checkout", "reviewing"].includes(p.status)) },
     { id: "done",            label: "Done",             tooltip: "Code reviewed or comments addressed",
       match: p => ["ready", "posted"].includes(p.status) },
   ];
