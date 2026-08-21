@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-__version__ = "1.1.3"
+__version__ = "1.2.0"
 
 # GitHub repo that hosts releases (owner/name)
 REPO_SLUG = "Elliot-putt/pr-reviewer"
@@ -39,7 +39,16 @@ def check_for_update() -> "dict | None":
         data = resp.json()
         latest = data.get("tag_name", "")
         if latest and _parse(latest) > _parse(__version__):
-            return {"latest": latest.lstrip("vV"), "url": data.get("html_url", f"https://github.com/{REPO_SLUG}/releases")}
+            zip_url = next(
+                (a.get("browser_download_url") for a in data.get("assets", [])
+                 if a.get("name", "").endswith(".zip")),
+                "",
+            )
+            return {
+                "latest": latest.lstrip("vV"),
+                "url": data.get("html_url", f"https://github.com/{REPO_SLUG}/releases"),
+                "zipUrl": zip_url,
+            }
         return None
     except Exception:
         logger.debug("Update check failed (offline or rate-limited).")

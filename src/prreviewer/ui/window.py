@@ -438,6 +438,72 @@ class AppWindow:
             logger.exception("pick_folder failed.")
             return {"ok": False, "error": str(exc)}
 
+    def install_update(self, zip_url: str) -> dict:
+        """Download a release zip, replace this .app bundle, and relaunch.
+
+        Only valid for the bundled app. Runs in a background thread; progress is
+        pushed to JS via 'update-progress' events.
+        """
+        from prreviewer.paths import is_frozen
+        if not is_frozen():
+            return {"ok": False, "error": "Running from source — use git pull instead."}
+        if not zip_url or not zip_url.startswith("https://github.com/"):
+            return {"ok": False, "error": "Invalid update URL"}
+        threading.Thread(target=self._do_install_update, args=(zip_url,), daemon=True, name="self-update").start()
+        return {"ok": True}
+
+    def _do_install_update(self, zip_url: str) -> None:
+        import os
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path as _P
+
+        def progress(stage: str, error: str = "") -> None:
+            self.push_to_js("update-progress", {"stage": stage, "error": error})
+
+        try:
+            app_path = _P(sys.executable).parents[2]  # .../PR Reviewer.app/Contents/MacOS/exe
+            if app_path.suffix != ".app":
+                progress("error", "Could not locate the app bundle.")
+                return
+
+            progress("downloading")
+            import requests
+            tmp = _P(tempfile.mkdtemp(prefix="pr-reviewer-update-"))
+            zip_path = tmp / "update.zip"
+            with requests.get(zip_url, stream=True, timeout=120) as r:
+                r.raise_for_status()
+                with open(zip_path, "wb") as f:
+                    for chunk in r.iter_content(1024 * 256):
+                        f.write(chunk)
+
+            progress("installing")
+            extract_dir = tmp / "extracted"
+            subprocess.run(["ditto", "-xk", str(zip_path), str(extract_dir)], check=True, capture_output=True)
+            new_app = extract_dir / app_path.name
+            if not new_app.exists():
+                found = list(extract_dir.glob("*.app"))
+                if not found:
+                    progress("error", "Update zip did not contain an app.")
+                    return
+                new_app = found[0]
+            subprocess.run(["xattr", "-dc", str(new_app)], check=False, capture_output=True)
+            subprocess.run(["rm", "-rf", str(app_path)], check=True, capture_output=True)
+            subprocess.run(["ditto", str(new_app), str(app_path)], check=True, capture_output=True)
+
+            progress("relaunching")
+            subprocess.Popen(
+                ["/bin/sh", "-c", f'sleep 1; open -n "{app_path}"'],
+                start_new_session=True,
+            )
+            import time as _t
+            _t.sleep(0.5)
+            os._exit(0)
+        except Exception as exc:
+            logger.exception("Self-update failed.")
+            progress("error", str(exc))
+
     def open_url(self, url: str) -> None:
         """Open *url* in the system default browser."""
         import webbrowser

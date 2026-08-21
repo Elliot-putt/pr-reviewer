@@ -371,6 +371,8 @@ button { font-family: inherit; cursor: pointer; }
 .updbar__x { background: none; border: 0; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 12px; padding: 2px 4px; }
 .updbar__x:hover { color: #fff; }
 .setsec__version { margin-left: auto; font-size: 11.5px; color: var(--color-default-400); }
+.updbar__btn { background: var(--color-primary-600, #5359ea); color: #fff; border: 0; border-radius: 7px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.updbar__btn:hover { filter: brightness(1.1); }
 .inp { width: 100%; border: 1px solid var(--color-default-300); border-radius: 6px; padding: 8px 11px; font-size: 13px; color: var(--color-default-900); background: #fff; }
 .inp:focus { outline: 0; border-color: var(--color-primary-600); box-shadow: 0 0 0 2px var(--color-primary-200); }
 select.inp { appearance: none; -webkit-appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23697386' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 14px; padding-right: 32px; }

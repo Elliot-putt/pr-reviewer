@@ -215,6 +215,7 @@ function BridgedApp() {
   const [lastRefreshed, setLastRefreshed] = useStateBr(null);
   const [updateInfo, setUpdateInfo] = useStateBr(null);  // {latest, url} from Python update check
   const [appVersion, setAppVersion] = useStateBr("");
+  const [updateStage, setUpdateStage] = useStateBr(null);  // downloading | installing | relaunching | error
   const [githubLogin, setGithubLogin] = useStateBr("");
   const timers = useRefBr([]);
   const incomingFired = useRefBr(false);
@@ -320,11 +321,17 @@ function BridgedApp() {
     window.__appEventBus.addEventListener('pr-updated', onPrUpdated);
     function onUpdateAvailable(e) { if (e.detail && e.detail.latest) setUpdateInfo(e.detail); }
     window.addEventListener('update-available', onUpdateAvailable);
+    function onUpdateProgress(e) {
+      const d = e.detail || {};
+      setUpdateStage(d.stage === "error" ? "error" : d.stage);
+    }
+    window.addEventListener('update-progress', onUpdateProgress);
     window.addEventListener('real-session-started', onRealSessionStarted);
     return () => {
       window.__appEventBus.removeEventListener('pr-detected', onPrDetected);
       window.__appEventBus.removeEventListener('pr-updated', onPrUpdated);
       window.removeEventListener('update-available', onUpdateAvailable);
+      window.removeEventListener('update-progress', onUpdateProgress);
       window.removeEventListener('real-session-started', onRealSessionStarted);
     };
   }, []);
@@ -517,11 +524,35 @@ function BridgedApp() {
       {updateInfo && (
         <div className="updbar">
           <Icon name="arrow-counter-clockwise" />
-          <span>Version {updateInfo.latest} is available{appVersion ? ` — you're on ${appVersion}` : ""}.</span>
-          <a href="#" onClick={e => { e.preventDefault(); if (window.pywebview && window.pywebview.api) window.pywebview.api.open_url(updateInfo.url); }}>
-            See what's new
-          </a>
-          <button className="updbar__x" title="Dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+          {updateStage === "downloading" ? (
+            <span><Spinner size={12} /> Downloading v{updateInfo.latest}…</span>
+          ) : updateStage === "installing" ? (
+            <span><Spinner size={12} /> Installing…</span>
+          ) : updateStage === "relaunching" ? (
+            <span><Spinner size={12} /> Relaunching…</span>
+          ) : (
+            <>
+              <span>Version {updateInfo.latest} is available{appVersion ? ` — you're on ${appVersion}` : ""}.</span>
+              {updateStage === "error" && <span style={{color:"#fca5a5"}}>Update failed — try the DMG.</span>}
+              {updateInfo.canSelfUpdate && (
+                <button
+                  className="updbar__btn"
+                  onClick={() => {
+                    setUpdateStage("downloading");
+                    window.pywebview.api.install_update(updateInfo.zipUrl).then(res => {
+                      if (!res || !res.ok) setUpdateStage("error");
+                    }).catch(() => setUpdateStage("error"));
+                  }}
+                >
+                  Update now
+                </button>
+              )}
+              <a href="#" onClick={e => { e.preventDefault(); if (window.pywebview && window.pywebview.api) window.pywebview.api.open_url(updateInfo.url); }}>
+                What's new
+              </a>
+            </>
+          )}
+          <button className="updbar__x" title="Dismiss" onClick={() => { setUpdateInfo(null); setUpdateStage(null); }}>✕</button>
         </div>
       )}
       {/* main window */}

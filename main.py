@@ -153,12 +153,15 @@ def main() -> None:
     # Update check: compare our version against the latest GitHub release and
     # prompt in the UI when a newer one exists. Re-checked every 6 hours.
     def _update_check_loop() -> None:
+        from prreviewer.paths import is_frozen
         from prreviewer.version import check_for_update
         time.sleep(5)  # let the window load first
         while True:
             info = check_for_update()
             if info:
                 logger.info("Update available: v%s", info["latest"])
+                # One-click self-update only works for the bundled .app
+                info["canSelfUpdate"] = bool(is_frozen() and info.get("zipUrl"))
                 window.push_to_js("update-available", info)
             time.sleep(6 * 3600)
 
