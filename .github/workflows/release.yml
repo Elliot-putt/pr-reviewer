@@ -61,10 +61,27 @@ jobs:
 
       - name: Package DMG (drag-to-Applications)
         run: |
+          brew install create-dmg
           mkdir dmg
           cp -R "dist/PR Reviewer.app" dmg/
-          ln -s /Applications dmg/Applications
-          hdiutil create -volname "PR Reviewer" -srcfolder dmg -ov -format UDZO "PR-Reviewer-$VERSION.dmg"
+          # create-dmg / hdiutil is flaky on runners — retry a few times
+          for i in 1 2 3 4; do
+            create-dmg \
+              --volname "PR Reviewer" \
+              --volicon build_res/icon.icns \
+              --background build_res/dmg-bg.png \
+              --window-pos 200 160 \
+              --window-size 560 360 \
+              --icon-size 128 \
+              --icon "PR Reviewer.app" 140 170 \
+              --app-drop-link 420 170 \
+              --hide-extension "PR Reviewer.app" \
+              --no-internet-enable \
+              "PR-Reviewer-$VERSION.dmg" dmg/ && break
+            echo "create-dmg attempt $i failed; retrying"
+            sleep 5
+          done
+          test -f "PR-Reviewer-$VERSION.dmg"
           cd dist && zip -qry "../PR-Reviewer-$VERSION.zip" "PR Reviewer.app"
 
       - name: Attach to release
