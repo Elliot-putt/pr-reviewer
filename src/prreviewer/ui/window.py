@@ -412,26 +412,52 @@ class AppWindow:
                 client.conversations_list(types=types, limit=1)
             except Exception:
                 types = "public_channel"
-            channels: list[dict] = []
+
+            by_id: dict[str, dict] = {}
+
+            def _add(ch: dict, member: "bool | None" = None) -> None:
+                cid = ch.get("id", "")
+                if not cid:
+                    return
+                by_id[cid] = {
+                    "id": cid,
+                    "name": ch.get("name", ""),
+                    "isPrivate": bool(ch.get("is_private")),
+                    "isMember": bool(ch.get("is_member")) if member is None else member,
+                }
+
+            # Channels the bot is a member of — small list, always complete, and
+            # guaranteed to include the ones that matter even if the workspace
+            # has more channels than the general listing below can page through.
+            try:
+                cursor = None
+                for _ in range(5):
+                    resp = client.users_conversations(types=types, exclude_archived=True, limit=200, cursor=cursor)
+                    for ch in resp.get("channels", []):
+                        _add(ch, member=True)
+                    cursor = (resp.get("response_metadata") or {}).get("next_cursor") or None
+                    if not cursor:
+                        break
+            except Exception:
+                logger.debug("users_conversations failed; relying on conversations_list only.")
+
             cursor = None
-            for _ in range(10):  # up to 10 pages × 200 channels
+            for _ in range(10):  # up to 10 pages × 1000 channels
                 resp = client.conversations_list(
                     types=types,
                     exclude_archived=True,
-                    limit=200,
+                    limit=1000,
                     cursor=cursor,
                 )
                 for ch in resp.get("channels", []):
-                    channels.append({
-                        "id": ch.get("id", ""),
-                        "name": ch.get("name", ""),
-                        "isPrivate": bool(ch.get("is_private")),
-                        "isMember": bool(ch.get("is_member")),
-                    })
+                    if ch.get("id") not in by_id:
+                        _add(ch)
                 cursor = (resp.get("response_metadata") or {}).get("next_cursor") or None
                 if not cursor:
                     break
-            channels.sort(key=lambda c: (not c["isMember"], c["name"]))
+
+            channels = sorted(by_id.values(), key=lambda c: (not c["isMember"], c["name"]))
+            logger.info("Channel picker: %d channels (%d bot-member).", len(channels), sum(1 for c in channels if c["isMember"]))
             return {"ok": True, "channels": channels}
         except Exception as exc:
             logger.exception("list_slack_channels failed.")
