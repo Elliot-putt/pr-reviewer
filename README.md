@@ -48,9 +48,11 @@ You need a Slack app with **Socket Mode**. One app can be shared by the whole te
 
 1. Create an app at [api.slack.com/apps](https://api.slack.com/apps) → **From scratch**.
 2. **Socket Mode** → enable → create an app-level token with `connections:write` → that's your `xapp-` token.
-3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `channels:read` → **Install to Workspace** → that's your `xoxb-` token.
-4. **Event Subscriptions** → enable → Subscribe to bot events → add `message.channels` → **Save Changes** (easy to forget — no events arrive without it).
+3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `channels:read` — and for **private channels** also `groups:history`, `groups:read` → **Install to Workspace** → that's your `xoxb-` token.
+4. **Event Subscriptions** → enable → Subscribe to bot events → add `message.channels` — and for **private channels** also `message.groups` → **Save Changes** (easy to forget — no events arrive without it).
 5. Invite the bot to your dev channel: `/invite @YourApp`.
+
+> **Note:** any time you add scopes or events later, you must reinstall the app to the workspace — that issues a *new* bot token, so update it in Settings.
 
 ![Slack settings](docs/img/slack-settings.png)
 
