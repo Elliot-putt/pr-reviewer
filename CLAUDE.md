@@ -89,7 +89,7 @@ CLAUDE_BIN=claude              # Path to Claude Code CLI
 CLAUDE_MODEL=sonnet            # Passed as --model to every review session (empty = CLI default/last used)
 REVIEW_COMMAND=/code-review    # Skill run on others' PRs
 ADDRESS_COMMAND=/address-comments  # Skill run on your own PRs with comments
-AUTO_REVIEW=false              # Auto-start review when PR lands (live Slack only)
+AUTO_REVIEW=true               # Auto-start review when PR lands (live Slack only; default on)
 SESSION_IDLE_MINUTES=20        # Kill review sessions after this long with no terminal activity (0 = never)
 NATIVE_NOTIFICATIONS=true      # Gate all terminal-notifier calls
 ```

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     claude_model: str = "sonnet"  # passed as --model to every review session; empty = CLI default
     review_command: str = "/code-review"
     address_command: str = "/address-comments"
-    auto_review: bool = False
+    auto_review: bool = True  # reviews start automatically when a PR lands
     session_idle_minutes: int = 20  # kill review sessions after this long with no terminal activity (0 = never)
     native_notifications: bool = True
     listening: bool = True  # sidebar "Listening for PRs" toggle, persisted across restarts
