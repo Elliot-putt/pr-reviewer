@@ -214,6 +214,7 @@ function BridgedApp() {
   const [backfilling, setBackfilling] = useStateBr(false);
   const [lastRefreshed, setLastRefreshed] = useStateBr(null);
   const [updateInfo, setUpdateInfo] = useStateBr(null);  // {latest, url} from Python update check
+  const [appVersion, setAppVersion] = useStateBr("");
   const [githubLogin, setGithubLogin] = useStateBr("");
   const timers = useRefBr([]);
   const incomingFired = useRefBr(false);
@@ -238,6 +239,7 @@ function BridgedApp() {
       window.__pyApi.getSettings().then(cfg => {
         if (!cfg) return;
         setSlackConnected(!!cfg.slackConnected);
+        if (cfg.appVersion) setAppVersion(cfg.appVersion);
         if (cfg.listening != null) setListening(!!cfg.listening);
         if (cfg.wsPort) setWsPort(cfg.wsPort);
         if (cfg.githubLogin) setGithubLogin(cfg.githubLogin);
@@ -253,11 +255,9 @@ function BridgedApp() {
               setSelectedId(deepLinked.id);
             }
           }).catch(() => setPrs([]));
-        } else {
-          // Unconfigured — show the demo inbox
-          setPrs(SEED_PRS.map(p => ({ ...p })));
         }
-      }).catch(() => setPrs(SEED_PRS.map(p => ({ ...p }))));
+        // Unconfigured installs get an empty inbox — no demo data.
+      }).catch(() => {});
     }
 
     if (window.pywebview && window.pywebview.api) {
@@ -516,7 +516,7 @@ function BridgedApp() {
       {updateInfo && (
         <div className="updbar">
           <Icon name="arrow-counter-clockwise" />
-          <span>Version {updateInfo.latest} is available.</span>
+          <span>Version {updateInfo.latest} is available{appVersion ? ` — you're on ${appVersion}` : ""}.</span>
           <a href="#" onClick={e => { e.preventDefault(); if (window.pywebview && window.pywebview.api) window.pywebview.api.open_url(updateInfo.url); }}>
             See what's new
           </a>

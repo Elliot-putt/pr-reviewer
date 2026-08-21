@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 
 # GitHub repo that hosts releases (owner/name)
 REPO_SLUG = "Elliot-putt/pr-reviewer"

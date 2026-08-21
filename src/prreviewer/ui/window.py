@@ -101,9 +101,11 @@ class AppWindow:
 
     def _settings_payload(self) -> dict:
         """Build the full settings dict sent to JS."""
+        from prreviewer.version import __version__
         s = self._settings
         github_login = self._get_github_login()
         return {
+            "appVersion": __version__,
             "slackConnected": bool(s.slack_app_token and s.slack_bot_token and self._slack_listener is not None),
             "githubConnected": bool(s.github_token),
             "wsPort": s.ui_port + 1,

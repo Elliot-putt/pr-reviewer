@@ -113,6 +113,7 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
   const [autoReview, setAutoReview] = useStateS(false);
   const [nativeNotifications, setNativeNotifications] = useStateS(true);
   const origFields = useRefS({});  // last-loaded values, to detect edited token masks
+  const [appVersion, setAppVersion] = useStateS("");
 
   function applyConfig(cfg) {
     if (!cfg) return;
@@ -134,6 +135,7 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
       skillsRepo:     cfg.skillsRepo     || "",
       sessionIdleMinutes: cfg.sessionIdleMinutes != null ? String(cfg.sessionIdleMinutes) : "",
     });
+    if (cfg.appVersion) setAppVersion(cfg.appVersion);
     setAutoReview(!!cfg.autoReview);
     setNativeNotifications(cfg.nativeNotifications !== false);
     setSlackConnected(!!cfg.slackConnected);
@@ -486,6 +488,7 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
               ? <span style={{color:"var(--color-red-600)"}}>{saveErr || "Save failed"}</span>
               : <>Changes are written to your <span className="mono">.env</span> file</>}
           </span>
+          {appVersion && <span className="setsec__version mono">v{appVersion}</span>}
         </div>
 
       </div>
