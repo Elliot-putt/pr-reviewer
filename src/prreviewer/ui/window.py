@@ -173,6 +173,10 @@ class AppWindow:
             s.session_idle_minutes = int(env.get("SESSION_IDLE_MINUTES", s.session_idle_minutes))
         except ValueError:
             pass
+        try:
+            s.max_concurrent_reviews = int(env.get("MAX_CONCURRENT_REVIEWS", s.max_concurrent_reviews))
+        except ValueError:
+            pass
 
     # ------------------------------------------------------------------
     # JS-callable API

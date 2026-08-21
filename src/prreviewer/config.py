@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     address_command: str = "/address-comments"
     auto_review: bool = True  # reviews start automatically when a PR lands
     session_idle_minutes: int = 20  # kill review sessions after this long with no terminal activity (0 = never)
+    max_concurrent_reviews: int = 2  # auto-started claude sessions running at once; extras queue (0 = unlimited)
     native_notifications: bool = True
     listening: bool = True  # sidebar "Listening for PRs" toggle, persisted across restarts
     ui_port: int = 8765

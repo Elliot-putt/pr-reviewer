@@ -38,17 +38,33 @@ class ReviewRunner:
         self._loop = loop
         self._sessions: dict[str, PtySession] = {}
         self._bridges: dict[str, "TerminalBridge"] = {}
+        self._running: set[str] = set()  # pr ids with a live session (counted against the cap)
+        self._auto_queue: list[tuple[str, "str | None"]] = []  # (pr_id, command) waiting for a free slot
+        self._queue_lock = threading.Lock()
 
-    def start_review(self, pr: PullRequest, command: str | None = None, auto: bool = False) -> "TerminalBridge":
+    def start_review(self, pr: PullRequest, command: str | None = None, auto: bool = False) -> "TerminalBridge | None":
         """Start the review pipeline for *pr* in a background thread.
 
-        Returns a TerminalBridge so the websocket server can attach clients.
+        Returns a TerminalBridge so the websocket server can attach clients, or
+        None when an auto-review is queued behind the concurrency cap.
         *auto* skips waiting for xterm resize — used for background auto-reviews.
         """
         from prreviewer.review.bridge import TerminalBridge
 
+        # Concurrency cap: each claude session costs 1-2 GB of RAM. Auto-started
+        # reviews beyond the cap queue and start as running sessions finish.
+        # Manual starts (user clicked) always run immediately.
+        limit = self._settings.max_concurrent_reviews
+        if auto and limit > 0 and len(self._running) >= limit:
+            with self._queue_lock:
+                if pr.id not in [q[0] for q in self._auto_queue] and pr.id not in self._running:
+                    self._auto_queue.append((pr.id, command))
+                    logger.info("Review for %s queued (%d running, cap %d).", pr.id, len(self._running), limit)
+            return None
+
         # Kill any previous session for this PR so re-reviews don't leak processes.
         self.stop(pr.id)
+        self._running.add(pr.id)
 
         repo_path = self._git.repo_path_for(pr)
         cwd = str(repo_path) if repo_path else "/tmp"
@@ -155,6 +171,27 @@ class ReviewRunner:
 
     def _run(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False) -> None:
         """Background thread: worktree checkout → spawn claude → cleanup."""
+        try:
+            self._run_inner(pr, pty, command, auto)
+        finally:
+            self._running.discard(pr.id)
+            self._start_next_queued()
+
+    def _start_next_queued(self) -> None:
+        """Start the next queued auto-review, if any and if a slot is free."""
+        with self._queue_lock:
+            if not self._auto_queue:
+                return
+            pr_id, command = self._auto_queue.pop(0)
+        pr = self._store.get(pr_id)
+        # Skip if it was started manually or resolved in the meantime.
+        if not pr or pr.status not in (PRStatus.WAITING, PRStatus.NEEDS_ATTENTION):
+            self._start_next_queued()
+            return
+        logger.info("Starting queued review for %s.", pr_id)
+        self.start_review(pr, command=command, auto=True)
+
+    def _run_inner(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False) -> None:
         self._store.update_status(pr.id, PRStatus.CHECKING_OUT)
 
         worktree_path = self._git.checkout(pr)
