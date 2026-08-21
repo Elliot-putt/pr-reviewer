@@ -27,7 +27,7 @@ For **your own PRs**, a background poller watches for new unresolved review comm
 
 1. Download the latest `PR-Reviewer-x.y.z.dmg` from [Releases](https://github.com/Elliot-putt/pr-reviewer/releases).
 2. Open it and drag **PR Reviewer** into **Applications**, then launch it from Launchpad / Spotlight and pin it to your Dock.
-3. First launch only: the app is unsigned, so macOS will warn you. **Right-click the app → Open → Open** (or `xattr -dc "/Applications/PR Reviewer.app"`).
+3. First launch only: the app is unsigned, so macOS will block it with *"Apple could not verify…"*. Click **Done** (not Move to Bin), then open **System Settings → Privacy & Security**, scroll down to *"PR Reviewer" was blocked…* and click **Open Anyway**. (Terminal alternative: `xattr -dc "/Applications/PR Reviewer.app"`.) This is a one-time step per machine.
 
 The app stores its config in `~/Library/Application Support/PR Reviewer/.env` — use the in-app Settings page to fill everything in. You still need the [Requirements](#requirements) below installed (`claude`, `terminal-notifier`, local clones).
 
