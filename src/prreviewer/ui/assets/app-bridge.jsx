@@ -485,6 +485,7 @@ function BridgedApp() {
   }
 
   function simulateNewPR() {
+    if (!INCOMING_PR) return;  // demo data removed — no-op
     if (incomingFired.current) return;
     incomingFired.current = true;
     setMenuOpen(false);
