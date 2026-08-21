@@ -22,7 +22,7 @@ function Toggle({ on, onChange, label, desc }) {
   );
 }
 
-function ChannelPicker({ value, onChange }) {
+function ChannelPicker({ value, onChange, prepare }) {
   const [channels, setChannels] = useStateS(null);   // null = not fetched yet
   const [loading, setLoading] = useStateS(false);
   const [error, setError] = useStateS("");
@@ -36,11 +36,14 @@ function ChannelPicker({ value, onChange }) {
     setError("");
     if (channels === null && !loading) {
       setLoading(true);
-      window.__pyApi.listSlackChannels().then(res => {
+      const ready = prepare ? prepare() : Promise.resolve();
+      ready.then(() => window.__pyApi.listSlackChannels()).then(res => {
         setLoading(false);
         if (res && res.ok) setChannels(res.channels || []);
-        else { setChannels([]); setError((res && res.error) || "Could not load channels"); }
-      }).catch(e => { setLoading(false); setChannels([]); setError(String(e)); });
+        // On failure, leave channels as null so the next focus retries
+        // (e.g. after the user saves a bot token).
+        else setError((res && res.error) || "Could not load channels");
+      }).catch(e => { setLoading(false); setError(String(e)); });
     }
   }
 
@@ -298,10 +301,21 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
                 placeholder={fields.slackBotToken ? "" : (loaded ? "Not set — enter xoxb- token" : placeholder)}
               />
             </Field>
-            <Field label="Channel" hint="searchable — needs a saved bot token" wide>
+            <Field label="Channel" hint="searchable — type to filter" wide>
               <ChannelPicker
                 value={fields.slackChannelId}
                 onChange={id => setField("slackChannelId", id)}
+                prepare={() => {
+                  // Auto-save freshly typed tokens so the search works immediately
+                  const draft = {};
+                  for (const k of ["slackAppToken", "slackBotToken"]) {
+                    const v = (fields[k] || "").trim();
+                    if (v && !v.includes("•")) draft[k] = v;
+                  }
+                  return Object.keys(draft).length
+                    ? window.__pyApi.saveSettings(draft).catch(() => {})
+                    : Promise.resolve();
+                }}
               />
             </Field>
             {connectErr && (
