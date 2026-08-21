@@ -35,12 +35,15 @@ jobs:
             echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Draft first — the app's update check ignores drafts, so the release
+          # only becomes visible once the Mac build has attached its assets.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
-            --generate-notes
+            --generate-notes \
+            --draft
           echo "created=true" >> "$GITHUB_OUTPUT"
-          echo "Published $TAG"
+          echo "Drafted $TAG"
 
   build-mac-app:
     needs: release
@@ -84,7 +87,7 @@ jobs:
           test -f "PR-Reviewer-$VERSION.dmg"
           cd dist && zip -qry "../PR-Reviewer-$VERSION.zip" "PR Reviewer.app"
 
-      - name: Attach to release
+      - name: Attach to release and publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -92,3 +95,5 @@ jobs:
             "PR-Reviewer-$VERSION.dmg" \
             "PR-Reviewer-$VERSION.zip" \
             --repo "$GITHUB_REPOSITORY"
+          # Assets are attached — now make the release public so apps see it
+          gh release edit "v$VERSION" --draft=false --repo "$GITHUB_REPOSITORY"
