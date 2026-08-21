@@ -190,12 +190,14 @@ class AppWindow:
         # Tokens are shown masked; a value still containing bullets means
         # "unchanged" (or a broken edit of the mask) and must never be written.
         changed = 0
+        changed_keys: set[str] = set()
         skipped_masked: list[str] = []
         for js_key, env_key in mapping.items():
             if js_key in bool_keys:
                 if js_key in data:
                     env[env_key] = "true" if data[js_key] else "false"
                     changed += 1
+                    changed_keys.add(env_key)
             elif js_key in data:
                 val = str(data.get(js_key, "") or "").strip()
                 if "•" in val:
@@ -204,11 +206,24 @@ class AppWindow:
                     # Empty is a deliberate clear — write it so fields can be blanked.
                     env[env_key] = val
                     changed += 1
+                    changed_keys.add(env_key)
 
         _write_env(_ENV_PATH, env)
         logger.info("Wrote %d key(s) to %s (masked/unchanged skipped: %s)", changed, _ENV_PATH, skipped_masked)
 
         self._reload_settings()
+
+        # Auto-connect Slack when this save changed Slack credentials and both
+        # tokens are now present — no separate Connect click needed. Saves that
+        # don't touch Slack never reconnect (a deliberate Disconnect sticks).
+        s = self._settings
+        if (
+            changed_keys & {"SLACK_APP_TOKEN", "SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID"}
+            and s.slack_app_token and s.slack_bot_token
+            and self._slack_listener is None
+        ):
+            result = self.connect_slack()
+            logger.info("Auto-connect after Slack settings change: %s", result)
 
         # Push fresh settings back so the UI reflects the save immediately
         self.push_to_js("settings-updated", self._settings_payload())
