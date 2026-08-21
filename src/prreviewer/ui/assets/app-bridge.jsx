@@ -86,7 +86,7 @@ function WsFooter({ pr, sess, posted, githubLogin, onApprove, onMarkReviewed, on
 }
 
 function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, revealCount, layout, onPost, posted, decision, setDecision, wsPort, hasRealSession, onStartReview, sessionStarted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview }) {
-  if (!pr) return <EmptyWorkspace />;
+  if (!pr) return <EmptyWorkspace channelName={window.__channelName || ""} />;
   const a = AUTHORS[pr.author];
   const checkedCount = comments.filter(c => c.checked).length;
   const showComments = pr.status === "ready" || pr.status === "posted";
@@ -215,6 +215,7 @@ function BridgedApp() {
   const [lastRefreshed, setLastRefreshed] = useStateBr(null);
   const [updateInfo, setUpdateInfo] = useStateBr(null);  // {latest, url} from Python update check
   const [appVersion, setAppVersion] = useStateBr("");
+  const [channelName, setChannelName] = useStateBr("");
   const [updateStage, setUpdateStage] = useStateBr(null);  // downloading | installing | relaunching | error
   const [githubLogin, setGithubLogin] = useStateBr("");
   const timers = useRefBr([]);
@@ -241,6 +242,8 @@ function BridgedApp() {
         if (!cfg) return;
         setSlackConnected(!!cfg.slackConnected);
         if (cfg.appVersion) setAppVersion(cfg.appVersion);
+        setChannelName(cfg.slackChannelName || "");
+        window.__channelName = cfg.slackChannelName || "";
         if (cfg.listening != null) setListening(!!cfg.listening);
         if (cfg.wsPort) setWsPort(cfg.wsPort);
         if (cfg.githubLogin) setGithubLogin(cfg.githubLogin);
@@ -321,6 +324,14 @@ function BridgedApp() {
     window.__appEventBus.addEventListener('pr-updated', onPrUpdated);
     function onUpdateAvailable(e) { if (e.detail && e.detail.latest) setUpdateInfo(e.detail); }
     window.addEventListener('update-available', onUpdateAvailable);
+    function onSettingsUpdated(e) {
+      const cfg = e.detail || {};
+      setSlackConnected(!!cfg.slackConnected);
+      setChannelName(cfg.slackChannelName || "");
+      window.__channelName = cfg.slackChannelName || "";
+      if (cfg.githubLogin) setGithubLogin(cfg.githubLogin);
+    }
+    window.addEventListener('settings-updated', onSettingsUpdated);
     function onUpdateProgress(e) {
       const d = e.detail || {};
       setUpdateStage(d.stage === "error" ? "error" : d.stage);
@@ -332,6 +343,7 @@ function BridgedApp() {
       window.__appEventBus.removeEventListener('pr-updated', onPrUpdated);
       window.removeEventListener('update-available', onUpdateAvailable);
       window.removeEventListener('update-progress', onUpdateProgress);
+      window.removeEventListener('settings-updated', onSettingsUpdated);
       window.removeEventListener('real-session-started', onRealSessionStarted);
     };
   }, []);
@@ -558,7 +570,7 @@ function BridgedApp() {
       {/* main window */}
       <div className="window">
         <div className="window__body">
-          <Sidebar view={view} setView={setView} counts={counts} listening={listening} setListening={toggleListening} slackConnected={slackConnected} />
+          <Sidebar view={view} setView={setView} counts={counts} listening={listening} setListening={toggleListening} slackConnected={slackConnected} channelName={channelName} />
           {view === "inbox" ? (
             <>
               <div className="inbox">

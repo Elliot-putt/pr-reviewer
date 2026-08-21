@@ -50,14 +50,14 @@ function CommentRow({ c, onToggle, revealed }) {
 }
 
 /* ---------- Empty state ---------- */
-function EmptyWorkspace() {
+function EmptyWorkspace({ channelName }) {
   return (
     <div className="empty">
       <div className="empty__art">
         <Icon name="magnifying-glass" />
       </div>
       <div className="empty__ttl">Select a pull request</div>
-      <div className="empty__sub">Pick a PR from the inbox to check out the branch and run the review skill. New PRs from <span className="mono">#spectre-website-dev</span> land here automatically.</div>
+      <div className="empty__sub">Pick a PR from the inbox to check out the branch and run the review skill. New PRs from {channelName ? <span className="mono">#{channelName}</span> : "your Slack channel"} land here automatically.</div>
     </div>
   );
 }

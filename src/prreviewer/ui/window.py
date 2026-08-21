@@ -94,6 +94,7 @@ class AppWindow:
         self._slack_listener = None
         self._slack_lock = threading.Lock()
         self.listening = settings.listening  # toggled from JS to pause event processing; persisted in .env
+        self._channel_names: dict[str, str] = {}  # channel id -> resolved name (cached)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -114,6 +115,7 @@ class AppWindow:
             "slackAppToken":  _mask(s.slack_app_token),
             "slackBotToken":  _mask(s.slack_bot_token),
             "slackChannelId": s.slack_channel_id,
+            "slackChannelName": self._slack_channel_name(),
             "githubToken":    _mask(s.github_token),
             "codeRoot":             s.code_root,
             "claudeBin":            s.claude_bin,
@@ -126,6 +128,24 @@ class AppWindow:
             "sessionIdleMinutes":   s.session_idle_minutes,
             "githubLogin":          github_login,
         }
+
+    def _slack_channel_name(self) -> str:
+        """Resolve the configured channel ID to its name (cached per id)."""
+        cid = self._settings.slack_channel_id
+        if not cid or not self._settings.slack_bot_token:
+            return ""
+        if cid in self._channel_names:
+            return self._channel_names[cid]
+        try:
+            from slack_sdk import WebClient
+            ch = WebClient(token=self._settings.slack_bot_token).conversations_info(channel=cid).get("channel", {})
+            name = ch.get("name", "")
+            if name:
+                self._channel_names[cid] = name
+            return name
+        except Exception:
+            logger.debug("Could not resolve channel name for %s.", cid)
+            return ""
 
     def _get_github_login(self) -> str:
         """Return the authenticated GitHub username, or empty string (cached per token)."""

@@ -107,7 +107,7 @@ function PRRow({ pr, active, onClick, density = "regular", badge = "pill", myLog
 }
 
 /* ---------- Sidebar ---------- */
-function Sidebar({ view, setView, counts, listening, setListening, slackConnected }) {
+function Sidebar({ view, setView, counts, listening, setListening, slackConnected, channelName }) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -141,7 +141,7 @@ function Sidebar({ view, setView, counts, listening, setListening, slackConnecte
             </div>
           </div>
         </div>
-        <div className="slackcard__chan mono"><Icon name="hash" />spectre-website-dev</div>
+        <div className="slackcard__chan mono"><Icon name="hash" />{channelName || "no channel set"}</div>
       </div>
 
       <button className={`listen ${listening ? "on" : ""}`} onClick={() => setListening(!listening)}>
