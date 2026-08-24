@@ -8,10 +8,18 @@ import threading
 import time
 from pathlib import Path
 
+_handlers: list = [logging.StreamHandler(sys.stderr)]
+if getattr(sys, "frozen", False):
+    # Finder swallows stderr — keep a real log file for the bundled app.
+    from logging.handlers import RotatingFileHandler
+    _log_dir = Path.home() / "Library" / "Logs" / "PR Reviewer"
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _handlers.append(RotatingFileHandler(_log_dir / "app.log", maxBytes=2_000_000, backupCount=2))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    stream=sys.stderr,
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
 
