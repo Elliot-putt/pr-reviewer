@@ -465,7 +465,7 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
           <div className="setsec__rows">
             <Toggle
               on={autoReview}
-              onChange={setAutoReview}
+              onChange={v => { setAutoReview(v); window.__pyApi.saveSettings({ autoReview: v }).catch(() => {}); }}
               label="Auto-review on new PR"
               desc="Start the code review immediately when a PR lands — it runs in the background so it's ready when you open it."
             />
@@ -481,7 +481,7 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
           <div className="setsec__rows">
             <Toggle
               on={nativeNotifications}
-              onChange={setNativeNotifications}
+              onChange={v => { setNativeNotifications(v); window.__pyApi.saveSettings({ nativeNotifications: v }).catch(() => {}); }}
               label="Native notifications"
               desc="Show a macOS notification when a new PR lands, a review completes, or your PR has new comments."
             />
