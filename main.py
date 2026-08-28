@@ -92,6 +92,10 @@ def main() -> None:
         github_client=github_client,
     )
 
+    # Notify the UI whenever a claude session actually spawns (including
+    # queued auto-reviews starting later, and manual/resumed sessions).
+    runner.on_session_started = lambda pr_id: window.push_to_js("real-session-started", {"prId": pr_id})
+
     # Wire store events → JS
     def _on_pr_updated(e: PRUpdated) -> None:
         # Push the full PR dict when available so fields like sessionDeadline
@@ -128,8 +132,9 @@ def main() -> None:
         # Never auto-review on backfill/refresh — only on live Slack socket events.
         if is_live and is_others_pr and settings.auto_review and not e.from_backfill:
             try:
+                # The runner's on_session_started callback notifies the UI when a
+                # session actually spawns — including queued ones starting later.
                 runner.start_review(pr, auto=True)
-                window.push_to_js("real-session-started", {"prId": pr.id})
             except Exception:
                 logger.exception("Auto-review failed for %s.", pr.id)
 

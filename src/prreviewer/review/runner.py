@@ -39,6 +39,9 @@ class ReviewRunner:
         self._sessions: dict[str, PtySession] = {}
         self._bridges: dict[str, "TerminalBridge"] = {}
         self._running: set[str] = set()  # pr ids with a live session (counted against the cap)
+        # Called with pr_id whenever a session genuinely starts (not when queued) —
+        # main.py wires this to notify the UI so it mounts the terminal.
+        self.on_session_started = None
         self._auto_queue: list[tuple[str, "str | None"]] = []  # (pr_id, command) waiting for a free slot
         self._queue_lock = threading.Lock()
 
@@ -83,6 +86,11 @@ class ReviewRunner:
             name=f"review-{pr.id}",
         )
         thread.start()
+        if self.on_session_started:
+            try:
+                self.on_session_started(pr.id)
+            except Exception:
+                logger.debug("on_session_started callback failed.")
         return bridge
 
     def _notify_ready(self, pr: PullRequest) -> None:
