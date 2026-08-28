@@ -42,12 +42,13 @@ class ReviewRunner:
         self._auto_queue: list[tuple[str, "str | None"]] = []  # (pr_id, command) waiting for a free slot
         self._queue_lock = threading.Lock()
 
-    def start_review(self, pr: PullRequest, command: str | None = None, auto: bool = False) -> "TerminalBridge | None":
+    def start_review(self, pr: PullRequest, command: str | None = None, auto: bool = False, resume: bool = False) -> "TerminalBridge | None":
         """Start the review pipeline for *pr* in a background thread.
 
         Returns a TerminalBridge so the websocket server can attach clients, or
         None when an auto-review is queued behind the concurrency cap.
         *auto* skips waiting for xterm resize — used for background auto-reviews.
+        *resume* reopens the previous claude conversation in the PR's worktree.
         """
         from prreviewer.review.bridge import TerminalBridge
 
@@ -77,7 +78,7 @@ class ReviewRunner:
 
         thread = threading.Thread(
             target=self._run,
-            args=(pr, pty, command, auto),
+            args=(pr, pty, command, auto, resume),
             daemon=True,
             name=f"review-{pr.id}",
         )
@@ -169,10 +170,10 @@ class ReviewRunner:
             time.sleep(min(remaining, 15))
         self._store.set_session_deadline(pr.id, 0)
 
-    def _run(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False) -> None:
+    def _run(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False, resume: bool = False) -> None:
         """Background thread: worktree checkout → spawn claude → cleanup."""
         try:
-            self._run_inner(pr, pty, command, auto)
+            self._run_inner(pr, pty, command, auto, resume)
         finally:
             self._running.discard(pr.id)
             self._start_next_queued()
@@ -191,7 +192,7 @@ class ReviewRunner:
         logger.info("Starting queued review for %s.", pr_id)
         self.start_review(pr, command=command, auto=True)
 
-    def _run_inner(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False) -> None:
+    def _run_inner(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False, resume: bool = False) -> None:
         self._store.update_status(pr.id, PRStatus.CHECKING_OUT)
 
         worktree_path = self._git.checkout(pr)
@@ -220,7 +221,7 @@ class ReviewRunner:
         cmd = command or self._settings.review_command
         initial_prompt = self._build_prompt(cmd, pr_url, cwd) if cmd else ""
 
-        pty.start(dimensions=(rows, cols), initial_prompt=initial_prompt)
+        pty.start(dimensions=(rows, cols), initial_prompt=initial_prompt, resume=resume)
         logger.info("Review PTY started for %s (auto=%s, cwd=%s, prompt=%r).", pr.id, auto, cwd, initial_prompt)
 
         if self._settings.session_idle_minutes > 0:
@@ -241,5 +242,7 @@ class ReviewRunner:
             if auto and self._settings.native_notifications:
                 self._notify_ready(pr)
 
-        if worktree_path:
+        # Worktree paths are deterministic per PR, so a restarted/resumed session
+        # may own this path now — only clean up if we're still the current session.
+        if worktree_path and self._sessions.get(pr.id) is pty:
             self._git.remove_worktree(pr, worktree_path)

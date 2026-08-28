@@ -55,10 +55,17 @@ class GitRepo:
             logger.error("Git fetch failed for %s: %s", pr.id, exc.stderr)
             return None
 
-        # Use a path inside a temp dir — git worktree add creates the final dir itself,
-        # so we give it a non-existent subdirectory to avoid the "already exists" error.
-        tmp_parent = Path(tempfile.mkdtemp(prefix=f"pr-review-{pr.ref.repo}-{pr.ref.number}-"))
+        # Deterministic path per PR so a resumed session lands in the same cwd —
+        # claude keys conversation history to the working directory, which is
+        # what makes `claude --continue` pick the old review back up.
+        tmp_parent = Path(tempfile.gettempdir()) / "pr-reviewer-worktrees" / f"{pr.ref.repo}-{pr.ref.number}"
         worktree_dir = tmp_parent / "wt"
+        if worktree_dir.exists():
+            logger.info("Reusing existing worktree at %s for %s.", worktree_dir, pr.id)
+            return worktree_dir
+        # A stale registration without the directory blocks `worktree add` — prune first.
+        subprocess.run(["git", "worktree", "prune"], cwd=repo, check=False, capture_output=True)
+        tmp_parent.mkdir(parents=True, exist_ok=True)
         env = {**os.environ, "PREK_ALLOW_NO_CONFIG": "1"}
         try:
             subprocess.run(

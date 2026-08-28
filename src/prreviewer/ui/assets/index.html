@@ -119,6 +119,12 @@
       }
       return Promise.resolve({ ok: false });
     },
+    resumeReview: function(prId) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.resume_review(prId);
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
     checkUpdates: function() {
       if (window.pywebview && window.pywebview.api) {
         return window.pywebview.api.check_updates();

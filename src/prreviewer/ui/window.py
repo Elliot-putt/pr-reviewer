@@ -320,6 +320,18 @@ class AppWindow:
             logger.exception("start_address_comments failed for %s.", pr_id)
             return {"ok": False, "error": str(exc)}
 
+    def resume_review(self, pr_id: str) -> dict:
+        """Reopen the previous claude conversation for *pr_id* (after idle timeout)."""
+        pr = self._store.get(pr_id)
+        if not pr:
+            return {"ok": False, "error": f"Unknown PR: {pr_id}"}
+        try:
+            self._runner.start_review(pr, resume=True)
+            return {"ok": True}
+        except Exception as exc:
+            logger.exception("resume_review failed for %s.", pr_id)
+            return {"ok": False, "error": str(exc)}
+
     def post_review(self, pr_id: str, comment_ids: list, decision: str) -> dict:
         """Post selected comments to GitHub."""
         pr = self._store.get(pr_id)

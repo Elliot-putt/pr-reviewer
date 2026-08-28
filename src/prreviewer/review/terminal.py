@@ -24,8 +24,12 @@ class PtySession:
         self._readers: list[Callable[[bytes], None]] = []
         self._lock = threading.Lock()
 
-    def start(self, dimensions: tuple[int, int] = (40, 220), initial_prompt: str = "") -> None:
-        """Spawn the process in a PTY and begin the read loop."""
+    def start(self, dimensions: tuple[int, int] = (40, 220), initial_prompt: str = "", resume: bool = False) -> None:
+        """Spawn the process in a PTY and begin the read loop.
+
+        *resume* passes --continue so claude reopens the most recent
+        conversation for this working directory instead of starting fresh.
+        """
         import os
 
         import ptyprocess
@@ -33,7 +37,9 @@ class PtySession:
         cmd = [self._bin, "--dangerously-skip-permissions"]
         if self._model:
             cmd += ["--model", self._model]
-        if initial_prompt:
+        if resume:
+            cmd.append("--continue")
+        elif initial_prompt:
             cmd.append(initial_prompt)
         # The bundled .app is launched by Finder with a minimal environment —
         # without TERM/LANG, claude renders colorless with broken box glyphs.

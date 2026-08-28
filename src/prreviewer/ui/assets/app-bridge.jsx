@@ -57,7 +57,7 @@ function IdleCountdown({ deadline }) {
   );
 }
 
-function WsFooter({ pr, sess, posted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview }) {
+function WsFooter({ pr, sess, posted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview, onResume }) {
   const alreadyApproved = posted && (pr.reviewDecision === "approved" || (sess && sess.decision === "approve"));
   const canApprove = githubLogin && pr.author && pr.author !== githubLogin;
   const isMyPr = githubLogin && pr.author === githubLogin;
@@ -65,6 +65,11 @@ function WsFooter({ pr, sess, posted, githubLogin, onApprove, onMarkReviewed, on
   return (
     <div className="ws__decision">
       <IdleCountdown deadline={pr.sessionDeadline} />
+      {pr.status === "ready" && !posted && (
+        <button className="dseg" onClick={onResume} title="Reopen the claude session for this PR — continues the previous conversation">
+          <Icon name="arrow-counter-clockwise" /> Resume session
+        </button>
+      )}
       {isMyPr ? (
         <button className={"dseg" + (posted ? " disabled" : "")} disabled={posted} onClick={onRequestReview}>
           <Icon name="git-pull-request" /> {posted ? "Review requested" : "Re-request Review"}
@@ -85,7 +90,7 @@ function WsFooter({ pr, sess, posted, githubLogin, onApprove, onMarkReviewed, on
   );
 }
 
-function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, revealCount, layout, onPost, posted, decision, setDecision, wsPort, hasRealSession, onStartReview, sessionStarted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview }) {
+function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, revealCount, layout, onPost, posted, decision, setDecision, wsPort, hasRealSession, onStartReview, sessionStarted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview, onResume }) {
   if (!pr) return <EmptyWorkspace channelName={window.__channelName || ""} />;
   const a = AUTHORS[pr.author];
   const checkedCount = comments.filter(c => c.checked).length;
@@ -178,7 +183,7 @@ function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, 
         <WsFooter
           pr={pr} sess={sess} posted={posted} githubLogin={githubLogin}
           onApprove={onApprove} onMarkReviewed={onMarkReviewed} onAddressComments={onAddressComments}
-          onRequestReview={onRequestReview}
+          onRequestReview={onRequestReview} onResume={onResume}
         />
       </footer>
     </section>
@@ -409,6 +414,18 @@ function BridgedApp() {
   }
 
   // Called by the Start Review button in the workspace
+  function resumeReview(id) {
+    const pr = prs.find(p => p.id === id);
+    if (!pr) return;
+    updateSession(id, { running: true });
+    setStatus(id, "checkout");
+    setRealSessions(prev => ({ ...prev, [id]: true }));
+    window.__pyApi.resumeReview(id).catch(err => {
+      console.error("resume_review failed:", err);
+      updateSession(id, { running: false });
+    });
+  }
+
   function startReview(id) {
     const pr = prs.find(p => p.id === id);
     if (!pr) return;
@@ -638,6 +655,7 @@ function BridgedApp() {
                 onMarkReviewed={markReviewed}
                 onAddressComments={addressComments}
                 onRequestReview={requestReview}
+                onResume={() => selectedId && resumeReview(selectedId)}
               />
             </>
           ) : (
