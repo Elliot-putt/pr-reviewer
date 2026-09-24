@@ -61,6 +61,16 @@ class ReviewPosted:
         return {"pr_id": self.pr_id, "count": self.count}
 
 
+@dataclass
+class ReplyUpdated:
+    """A reply item in the Replies inbox was added or changed."""
+
+    thread_id: str
+
+    def to_dict(self) -> dict:
+        return {"thread_id": self.thread_id}
+
+
 # ---------------------------------------------------------------------------
 # EventBus
 # ---------------------------------------------------------------------------

@@ -195,7 +195,9 @@ function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, 
    -------------------------------------------------------------------------- */
 function BridgedApp() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const [view, setView] = useStateBr("inbox");
+  const [view, setView] = useStateBr(() => new URLSearchParams(window.location.search).get("view") === "replies" ? "replies" : "inbox");
+  const [replies, setReplies] = useStateBr([]);
+  const [repliesError, setRepliesError] = useStateBr("");
   // Start with seed data; swap to empty once we know we're in real (configured) mode.
   // Start empty — real PRs arrive from Python; demo data is only seeded if the
   // app turns out to be unconfigured (prevents dummy rows flashing on startup).
@@ -252,6 +254,11 @@ function BridgedApp() {
         if (cfg.listening != null) setListening(!!cfg.listening);
         if (cfg.wsPort) setWsPort(cfg.wsPort);
         if (cfg.githubLogin) setGithubLogin(cfg.githubLogin);
+        window.__pyApi.getReplies().then(res => {
+          if (!res) return;
+          setReplies(res.items || []);
+          setRepliesError(res.error || "");
+        }).catch(() => {});
         if (cfg.isConfigured) {
           setIsConfigured(true);
           // Load whatever is already in the store (may be empty before backfill)
@@ -327,6 +334,16 @@ function BridgedApp() {
 
     window.__appEventBus.addEventListener('pr-detected', onPrDetected);
     window.__appEventBus.addEventListener('pr-updated', onPrUpdated);
+    function onReplyUpdated(e) {
+      const d = e.detail || {};
+      setRepliesError(d.error || "");
+      const item = d.item;
+      if (!item || !item.id) return;
+      setReplies(prev => prev.some(r => r.id === item.id)
+        ? prev.map(r => r.id === item.id ? item : r)
+        : [item, ...prev]);
+    }
+    window.__appEventBus.addEventListener('reply-updated', onReplyUpdated);
     function onUpdateAvailable(e) { if (e.detail && e.detail.latest) setUpdateInfo(e.detail); }
     window.addEventListener('update-available', onUpdateAvailable);
     function onSettingsUpdated(e) {
@@ -346,6 +363,7 @@ function BridgedApp() {
     return () => {
       window.__appEventBus.removeEventListener('pr-detected', onPrDetected);
       window.__appEventBus.removeEventListener('pr-updated', onPrUpdated);
+      window.__appEventBus.removeEventListener('reply-updated', onReplyUpdated);
       window.removeEventListener('update-available', onUpdateAvailable);
       window.removeEventListener('update-progress', onUpdateProgress);
       window.removeEventListener('settings-updated', onSettingsUpdated);
@@ -536,7 +554,8 @@ function BridgedApp() {
     open: prs.filter(p => !["posted", "merged", "closed"].includes(p.status)).length,
     toReview: prs.filter(p => ["waiting", "checkout", "reviewing"].includes(p.status) && p.author !== githubLogin).length,
     attention: prs.filter(p => p.status === "needs_attention").length,
-  }), [prs, githubLogin]);
+    replies: replies.filter(r => r.status === "pending" || r.status === "verdict_ready").length,
+  }), [prs, githubLogin, replies]);
 
   const filters = React.useMemo(() => makeFilters(githubLogin), [githubLogin]);
 
@@ -658,6 +677,8 @@ function BridgedApp() {
                 onResume={() => selectedId && resumeReview(selectedId)}
               />
             </>
+          ) : view === "replies" ? (
+            <RepliesView replies={replies} error={repliesError} />
           ) : (
             <SettingsView listening={listening} setListening={toggleListening} slackConnected={slackConnected} setSlackConnected={setSlackConnected} />
           )}

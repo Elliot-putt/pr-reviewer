@@ -123,6 +123,10 @@ function Sidebar({ view, setView, counts, listening, setListening, slackConnecte
           <Icon name="envelope" /> <span>Inbox</span>
           {counts.open > 0 && <span className="sidenav__count">{counts.open}</span>}
         </button>
+        <button className={`sidenav__item ${view === "replies" ? "active" : ""}`} onClick={() => setView("replies")}>
+          <Icon name="chat-circle-dots" /> <span>Replies</span>
+          {counts.replies > 0 && <span className="sidenav__count">{counts.replies}</span>}
+        </button>
         <button className={`sidenav__item ${view === "settings" ? "active" : ""}`} onClick={() => setView("settings")}>
           <Icon name="gear-six" /> <span>Settings</span>
         </button>

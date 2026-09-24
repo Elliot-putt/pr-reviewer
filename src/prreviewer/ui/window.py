@@ -11,18 +11,18 @@ from typing import TYPE_CHECKING
 from prreviewer.config import Settings
 from prreviewer.core.store import PRStore
 from prreviewer.models import PRStatus, ReviewDecision
+from prreviewer.paths import env_path
 
 if TYPE_CHECKING:
     from prreviewer.github.client import GitHubClient
     from prreviewer.github.pull_requests import PullRequestService
+    from prreviewer.github.replies import RepliesStore
     from prreviewer.github.reviews import ReviewPublisher
     from prreviewer.review.git import GitRepo
     from prreviewer.review.runner import ReviewRunner
     from prreviewer.ui.server import UiServer
 
 logger = logging.getLogger(__name__)
-
-from prreviewer.paths import env_path
 
 # Absolute path to the .env file (repo root, or Application Support when bundled)
 _ENV_PATH = env_path()
@@ -81,6 +81,7 @@ class AppWindow:
         git_repo: "GitRepo",
         runner: "ReviewRunner",
         github_client: "GitHubClient | None" = None,
+        replies_store: RepliesStore | None = None,
     ) -> None:
         self._settings = settings
         self._store = store
@@ -90,6 +91,7 @@ class AppWindow:
         self._git_repo = git_repo
         self._runner = runner
         self._github_client = github_client
+        self._replies_store = replies_store
         self._window = None
         self._slack_listener = None
         self._slack_lock = threading.Lock()
@@ -175,6 +177,11 @@ class AppWindow:
             pass
         try:
             s.max_concurrent_reviews = int(env.get("MAX_CONCURRENT_REVIEWS", s.max_concurrent_reviews))
+        except ValueError:
+            pass
+        s.replies_enabled = env.get("REPLIES_ENABLED", "true" if s.replies_enabled else "false") == "true"
+        try:
+            s.replies_poll_seconds = int(env.get("REPLIES_POLL_SECONDS", s.replies_poll_seconds))
         except ValueError:
             pass
 
@@ -598,6 +605,16 @@ class AppWindow:
     def get_prs(self) -> list:
         """Return all PRs as a JSON-serialisable list."""
         return [pr.to_dict() for pr in self._store.list_all()]
+
+    def get_replies(self) -> dict:
+        """Return Replies inbox items (newest activity first) and any poller error."""
+        if self._replies_store is None:
+            return {"items": [], "error": "", "enabled": False}
+        return {
+            "items": self._replies_store.list_js(),
+            "error": self._replies_store.error,
+            "enabled": self._settings.replies_enabled,
+        }
 
     # ------------------------------------------------------------------
     # Push events to JS

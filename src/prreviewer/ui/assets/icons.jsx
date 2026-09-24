@@ -13,6 +13,7 @@ const ICONS = {
   "clock-countdown": { p: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.3V12l3.2 2"/>' },
   "paper-plane-tilt": { p: '<path d="M20.5 3.5L3 10.7l6.6 2.9 2.9 6.6 7.5-16.7z"/><path d="M9.6 13.6l4-4"/>' },
   "arrow-counter-clockwise": { p: '<path d="M4.6 12a7.4 7.4 0 1 0 2.3-5.4L4 9.2"/><path d="M3.6 4.5v4.8h4.8"/>' },
+  "chat-circle-dots": { p: '<path d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5z"/><circle cx="8.3" cy="12" r="0.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="0.9" fill="currentColor" stroke="none"/><circle cx="15.7" cy="12" r="0.9" fill="currentColor" stroke="none"/>' },
   "envelope": { p: '<rect x="3" y="5.5" width="18" height="13" rx="2.2"/><path d="M4 7.5l8 5.5 8-5.5"/>' },
   "gear-six": { p: '<circle cx="12" cy="12" r="3.3"/><path d="M12 2.8v3M12 18.2v3M21.2 12h-3M5.8 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6L5.5 5.5"/>' },
   "hash": { p: '<path d="M9.2 3.5L7 20.5M17 3.5l-2.2 17M4.5 8.8h15.5M3.8 15.2h15.5"/>' },

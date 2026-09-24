@@ -37,7 +37,7 @@ def main() -> None:
     fix_path_env()  # Finder-launched apps lack /opt/homebrew/bin on PATH
 
     from prreviewer.config import Settings
-    from prreviewer.core.events import EventBus, PRDetected, PRUpdated
+    from prreviewer.core.events import EventBus, PRDetected, PRUpdated, ReplyUpdated
     from prreviewer.core.store import PRStore
     from prreviewer.github.client import GitHubClient
     from prreviewer.github.pull_requests import PullRequestService
@@ -47,12 +47,14 @@ def main() -> None:
     from prreviewer.slack.listener import SlackListener
     from prreviewer.slack.parser import PRLinkParser
     from prreviewer.github.poller import PRPoller
+    from prreviewer.github.replies import RepliesPoller, RepliesStore
     from prreviewer.ui.server import UiServer
     from prreviewer.ui.window import AppWindow
 
     settings = Settings()
     event_bus = EventBus()
     store = PRStore(event_bus)
+    replies_store = RepliesStore(event_bus)
     parser = PRLinkParser()
     github_client = GitHubClient(settings)
     pr_service = PullRequestService(github_client)
@@ -90,6 +92,7 @@ def main() -> None:
         git_repo=git_repo,
         runner=runner,
         github_client=github_client,
+        replies_store=replies_store,
     )
 
     # Notify the UI whenever a claude session actually spawns (including
@@ -141,6 +144,12 @@ def main() -> None:
     event_bus.subscribe(PRUpdated, _on_pr_updated)
     event_bus.subscribe(PRDetected, _on_pr_detected)
 
+    def _on_reply_updated(e: ReplyUpdated) -> None:
+        item = replies_store.item_js(e.thread_id) if e.thread_id else None
+        window.push_to_js("reply-updated", {"item": item, "error": replies_store.error})
+
+    event_bus.subscribe(ReplyUpdated, _on_reply_updated)
+
     # Start Slack if credentials present — track listener on window so sidebar
     # shows Connected and connect_slack() from JS stays idempotent.
     listener: SlackListener | None = None
@@ -191,6 +200,8 @@ def main() -> None:
         settings=settings,
     )
     poller.start()
+
+    RepliesPoller(settings=settings, github_client=github_client, store=replies_store).start()
 
     logger.info("Launching window on http://127.0.0.1:%d/", settings.ui_port)
     window.start()

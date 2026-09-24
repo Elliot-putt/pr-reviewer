@@ -94,3 +94,25 @@ class GitHubClient:
             .get("nodes", [])
         )
         return sum(1 for n in nodes if not n["isResolved"])
+
+    def graphql(self, query: str, variables: dict) -> dict:
+        """Run a GraphQL query and return its ``data`` object.
+
+        Raises on HTTP errors, and on GraphQL errors when no data came back.
+        """
+        import requests
+        resp = requests.post(
+            "https://api.github.com/graphql",
+            headers={
+                "Authorization": f"Bearer {self._settings.github_token}",
+                "Accept": "application/vnd.github+json",
+            },
+            json={"query": query, "variables": variables},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        data = body.get("data")
+        if data is None:
+            raise RuntimeError(f"GraphQL error: {body.get('errors')}")
+        return data

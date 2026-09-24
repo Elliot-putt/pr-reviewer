@@ -28,6 +28,7 @@
   <script type="text/babel" src="app-ui.jsx"></script>
   <script type="text/babel" src="app-workspace.jsx"></script>
   <script type="text/babel" src="app-settings.jsx"></script>
+  <script type="text/babel" src="app-replies.jsx"></script>
   <script type="text/babel" src="app-main.jsx"></script>
   <script type="text/babel" src="app-bridge.jsx"></script>
 
@@ -107,6 +108,12 @@
       }
       return Promise.resolve([]);
     },
+    getReplies: function() {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.get_replies();
+      }
+      return Promise.resolve({ items: [], error: '' });
+    },
     getSettings: function() {
       if (window.pywebview && window.pywebview.api) {
         return window.pywebview.api.get_settings();
@@ -178,6 +185,10 @@
 
   window.addEventListener('pr-updated', (e) => {
     window.__appEventBus.dispatchEvent(new CustomEvent('pr-updated', { detail: e.detail }));
+  });
+
+  window.addEventListener('reply-updated', (e) => {
+    window.__appEventBus.dispatchEvent(new CustomEvent('reply-updated', { detail: e.detail }));
   });
   </script>
 </body>

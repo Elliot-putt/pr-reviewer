@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     native_notifications: bool = True
     listening: bool = True  # sidebar "Listening for PRs" toggle, persisted across restarts
     ui_port: int = 8765
+    replies_enabled: bool = True
+    replies_poll_seconds: int = 60
+    replies_watch_seconds: int = 300
+    replies_model: str = "sonnet"
+    replies_max_concurrent: int = 1
+    auto_reply: bool = False
+    auto_reply_confidence: float = 0.85
 
     # Absolute path so settings load correctly no matter which directory the
     # app is launched from; paths.env_path() also handles the bundled .app.
