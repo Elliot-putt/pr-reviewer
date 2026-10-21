@@ -90,7 +90,7 @@ function WsFooter({ pr, sess, posted, githubLogin, onApprove, onMarkReviewed, on
   );
 }
 
-function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, revealCount, layout, onPost, posted, decision, setDecision, wsPort, hasRealSession, onStartReview, sessionStarted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview, onResume }) {
+function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, revealCount, layout, onPost, posted, decision, setDecision, wsPort, hasRealSession, onStartReview, sessionStarted, githubLogin, onApprove, onMarkReviewed, onAddressComments, onRequestReview, onResume, sessionEpoch }) {
   if (!pr) return <EmptyWorkspace channelName={window.__channelName || ""} />;
   const a = AUTHORS[pr.author];
   const checkedCount = comments.filter(c => c.checked).length;
@@ -99,15 +99,20 @@ function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, 
   const isMyPr = githubLogin && pr.author === githubLogin;
   const termTitle = isMyPr ? "claude — address-comments" : "claude — code-review";
   const startAction = isMyPr ? onAddressComments : onStartReview;
-  const startLabel = isMyPr ? "Address Comments" : "Start Review";
-  const startHint = isMyPr ? "Checks out the branch and runs the address-comments skill" : "Checks out the branch and runs the review skill";
+  const queued = !!pr.queued && pr.status === "waiting";
+  const startLabel = isMyPr ? "Address Comments" : queued ? "Start now" : "Start Review";
+  const startHint = isMyPr
+    ? "Checks out the branch and runs the address-comments skill"
+    : queued
+      ? "Auto-review is queued — the review limit is reached. It starts by itself when a running review closes (Approve, Mark as reviewed, or its 20-min idle timeout). Start now to skip the queue."
+      : "Checks out the branch and runs the review skill";
   const startIcon = isMyPr ? "chat-circle-dots" : "magnifying-glass";
 
   // Keep xterm mounted for the lifetime of the real PTY session, including after marking reviewed.
   const ptyActive = hasRealSession && wsPort;
 
   const termEl = ptyActive
-    ? <XTermTerminal prId={pr.id} wsPort={wsPort} running={running} />
+    ? <XTermTerminal key={`${pr.id}:${sessionEpoch || 0}`} prId={pr.id} wsPort={wsPort} running={running} />
     : sessionStarted && !hasRealSession
       ? <Terminal lines={lines} running={running} />
       : hasRealSession && !isActive
@@ -164,7 +169,7 @@ function BridgedReviewWorkspace({ pr, sess, lines, running, comments, onToggle, 
       <header className="ws__head">
         <div className="ws__headtop">
           <span className="ws__repo mono">{pr.repo} <span className="prrow__num">#{pr.number}</span></span>
-          <StatusBadge status={pr.status} treatment="pill" size="lg" />
+          <StatusBadge status={pr.queued && pr.status === "waiting" ? "queued" : pr.status} treatment="pill" size="lg" />
         </div>
         <h2 className="ws__title">{pr.title}</h2>
         <div className="ws__meta">
@@ -216,7 +221,9 @@ function BridgedApp() {
   const [sessions, setSessions] = useStateBr({});
   const [wsPort, setWsPort] = useStateBr(8766);
   const [realSessions, setRealSessions] = useStateBr({}); // prId -> bool (has live PTY)
+  const [sessionEpochs, setSessionEpochs] = useStateBr({});
   const [backfilling, setBackfilling] = useStateBr(false);
+  const [backfillError, setBackfillError] = useStateBr("");
   const [lastRefreshed, setLastRefreshed] = useStateBr(null);
   const [updateInfo, setUpdateInfo] = useStateBr(null);  // {latest, url} from Python update check
   const [appVersion, setAppVersion] = useStateBr("");
@@ -277,8 +284,9 @@ function BridgedApp() {
 
     // Backfill lifecycle banners from Python
     function onBackfillStart() { setBackfilling(true); }
-    function onBackfillDone() {
+    function onBackfillDone(e) {
       setBackfilling(false);
+      setBackfillError((e && e.detail && e.detail.error) || "");
       setLastRefreshed(new Date());
       window.__pyApi.getPrs().then(livePrs => {
         const visible = (livePrs || []).filter(p => p.status !== "merged" && p.status !== "closed");
@@ -287,9 +295,24 @@ function BridgedApp() {
     }
     window.addEventListener('backfill-start', onBackfillStart);
     window.addEventListener('backfill-done', onBackfillDone);
+    function resync() {
+      if (!(window.pywebview && window.pywebview.api)) return;
+      window.__pyApi.getPrs().then(livePrs => {
+        const visible = (livePrs || []).filter(p => p.status !== "merged" && p.status !== "closed");
+        setPrs(prev => {
+          const known = new Map(prev.map(p => [p.id, p]));
+          return visible.map(p => known.has(p.id) ? { ...known.get(p.id), ...p } : { ...p, isNew: true });
+        });
+        setTimeout(() => setPrs(prev => prev.map(p => p.isNew ? { ...p, isNew: false } : p)), 1800);
+      }).catch(() => {});
+    }
+    window.addEventListener('focus', resync);
+    const resyncTimer = setInterval(resync, 30000);
     return () => {
       window.removeEventListener('backfill-start', onBackfillStart);
       window.removeEventListener('backfill-done', onBackfillDone);
+      window.removeEventListener('focus', resync);
+      clearInterval(resyncTimer);
     };
   }, []);
 
@@ -323,6 +346,7 @@ function BridgedApp() {
       const { prId } = e.detail || {};
       if (!prId) return;
       setRealSessions(prev => ({ ...prev, [prId]: true }));
+      setSessionEpochs(prev => ({ ...prev, [prId]: (prev[prId] || 0) + 1 }));
     }
 
     window.__appEventBus.addEventListener('pr-detected', onPrDetected);
@@ -534,7 +558,7 @@ function BridgedApp() {
 
   const counts = React.useMemo(() => ({
     open: prs.filter(p => !["posted", "merged", "closed"].includes(p.status)).length,
-    toReview: prs.filter(p => ["waiting", "checkout", "reviewing"].includes(p.status) && p.author !== githubLogin).length,
+    toReview: prs.filter(p => ["waiting", "checkout", "reviewing", "ready"].includes(p.status) && p.author !== githubLogin).length,
     attention: prs.filter(p => p.status === "needs_attention").length,
   }), [prs, githubLogin]);
 
@@ -615,6 +639,9 @@ function BridgedApp() {
                     <div className="filter__desc">{filters.find(f => f.id === filter).tooltip}</div>
                   )}
                 </div>
+                {!backfilling && backfillError && (
+                  <div className="inbox__slackerr"><Icon name="warning" /> {backfillError}</div>
+                )}
                 {backfilling && (
                   <div className="inbox__backfill">
                     <Spinner size={13} color="var(--color-primary-600)" />
@@ -648,6 +675,7 @@ function BridgedApp() {
                 setDecision={setDecision}
                 wsPort={wsPort}
                 hasRealSession={selectedId ? !!realSessions[selectedId] : false}
+                sessionEpoch={selectedId ? sessionEpochs[selectedId] : 0}
                 onStartReview={() => selectedId && startReview(selectedId)}
                 sessionStarted={!!sess}
                 githubLogin={githubLogin}

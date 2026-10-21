@@ -34,9 +34,11 @@
   <!-- xterm.js terminal lifecycle -->
   <script>
   window.__xtermInstances = {};
+  window.__xtermPending = {};
 
   window.__mountXterm = function(containerId, prId, wsPort) {
     if (window.__xtermInstances[prId]) return;
+    if (window.__xtermPending[prId]) clearTimeout(window.__xtermPending[prId]);
     var container = document.getElementById(containerId);
     if (!container) return;
     var XTermClass = window.__XTerm;
@@ -49,7 +51,8 @@
     var fitAddon = new XFitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(container);
-    setTimeout(function() {
+    window.__xtermPending[prId] = setTimeout(function() {
+      delete window.__xtermPending[prId];
       fitAddon.fit();
       var ws = new WebSocket('ws://127.0.0.1:' + wsPort + '/terminal/' + prId);
       ws.onopen = function() { fitAddon.fit(); ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows})); };
@@ -64,6 +67,10 @@
   };
 
   window.__destroyXterm = function(prId) {
+    if (window.__xtermPending[prId]) {
+      clearTimeout(window.__xtermPending[prId]);
+      delete window.__xtermPending[prId];
+    }
     var inst = window.__xtermInstances[prId];
     if (!inst) return;
     inst.ro.disconnect(); inst.ws.close(); inst.term.dispose();

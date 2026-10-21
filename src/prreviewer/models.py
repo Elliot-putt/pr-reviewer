@@ -53,6 +53,7 @@ class PullRequest:
     review_decision: str = ""  # "approved", "changes_requested", or ""
     unresolved_count: int = 0
     session_deadline: float = 0.0  # epoch seconds when the idle watchdog will kill the session (0 = none)
+    queued: bool = False
 
     def _landed_label(self) -> str:
         """Human-readable relative time since detection."""
@@ -84,6 +85,7 @@ class PullRequest:
             "reviewDecision": self.review_decision,
             "unresolvedCount": self.unresolved_count,
             "sessionDeadline": self.session_deadline,
+            "queued": self.queued,
         }
 
 

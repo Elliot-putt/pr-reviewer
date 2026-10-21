@@ -28,6 +28,15 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 
+def _already_running(port: int) -> bool:
+    """True if another copy already serves the UI on *port* (a second copy would split Slack events)."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
 def main() -> None:
     """Bootstrap and launch the PR Reviewer app."""
     import time as _time
@@ -39,6 +48,7 @@ def main() -> None:
     from prreviewer.config import Settings
     from prreviewer.core.events import EventBus, PRDetected, PRUpdated
     from prreviewer.core.store import PRStore
+    from prreviewer.models import PRStatus
     from prreviewer.github.client import GitHubClient
     from prreviewer.github.pull_requests import PullRequestService
     from prreviewer.github.reviews import ReviewPublisher
@@ -51,6 +61,13 @@ def main() -> None:
     from prreviewer.ui.window import AppWindow
 
     settings = Settings()
+    if _already_running(settings.ui_port):
+        logger.error("PR Reviewer is already running (port %d is in use) — not starting a second copy.", settings.ui_port)
+        if settings.native_notifications:
+            from prreviewer.github.poller import _notify
+            _notify(title="PR Reviewer is already running", subtitle="", message="Opening the running copy instead.",
+                    pr_number=0, ui_port=settings.ui_port)
+        sys.exit(1)
     event_bus = EventBus()
     store = PRStore(event_bus)
     parser = PRLinkParser()
@@ -94,7 +111,10 @@ def main() -> None:
 
     # Notify the UI whenever a claude session actually spawns (including
     # queued auto-reviews starting later, and manual/resumed sessions).
-    runner.on_session_started = lambda pr_id: window.push_to_js("real-session-started", {"prId": pr_id})
+    runner.on_session_started = lambda pr_id: threading.Thread(
+        target=window.push_to_js, args=("real-session-started", {"prId": pr_id}), daemon=True,
+        name="session-started-push",
+    ).start()
 
     # Wire store events → JS
     def _on_pr_updated(e: PRUpdated) -> None:
@@ -107,13 +127,18 @@ def main() -> None:
         if not window.listening:
             logger.info("Listening paused — ignoring PR %s.", e.ref)
             return
+        existing = store.get(f"pr-{e.ref.repo}-{e.ref.number}")
         pr = pr_service.fetch(e.ref, detected_at=e.slack_ts)
         if pr is None:
+            return
+        if existing is not None:
+            if pr.status in (PRStatus.MERGED, PRStatus.CLOSED) and existing.status != pr.status:
+                store.update_status(existing.id, pr.status)
             return
         store.add(pr)
         window.push_to_js("pr-detected", pr.to_dict())
 
-        is_live = e.slack_ts > _startup_time
+        is_live = e.slack_ts > _startup_time and (not e.from_backfill or e.catch_up)
         my_login = github_client.get_login()
         is_others_pr = not my_login or pr.author != my_login
 
@@ -130,7 +155,7 @@ def main() -> None:
 
         # Auto-review: start Claude Code immediately in the background.
         # Never auto-review on backfill/refresh — only on live Slack socket events.
-        if is_live and is_others_pr and settings.auto_review and not e.from_backfill:
+        if is_live and is_others_pr and settings.auto_review:
             try:
                 # The runner's on_session_started callback notifies the UI when a
                 # session actually spawns — including queued ones starting later.
@@ -158,8 +183,8 @@ def main() -> None:
         if listener:
             logger.info("Starting backfill of last 25 Slack messages…")
             window.push_to_js("backfill-start", {})
-            listener.backfill(limit=25)
-            window.push_to_js("backfill-done", {})
+            error = listener.backfill(limit=25)
+            window.push_to_js("backfill-done", {"error": error})
 
     threading.Thread(target=_backfill_after_ready, daemon=True, name="backfill").start()
 

@@ -413,12 +413,14 @@ class AppWindow:
 
     def _run_backfill(self) -> None:
         self.push_to_js("backfill-start", {})
+        error = ""
         try:
-            self._slack_listener.backfill(limit=25)
+            error = self._slack_listener.backfill(limit=25)
         except Exception:
             logger.exception("Manual backfill failed.")
+            error = "Refresh failed — see the log."
         finally:
-            self.push_to_js("backfill-done", {})
+            self.push_to_js("backfill-done", {"error": error})
 
     def set_listening(self, value: bool) -> dict:
         """Pause or resume Slack event processing without disconnecting. Persisted."""
@@ -612,7 +614,7 @@ class AppWindow:
         try:
             self._window.evaluate_js(js)
         except Exception:
-            logger.debug("push_to_js failed (window may be closing).")
+            logger.warning("push_to_js(%s) failed — the screen may be out of date until it resyncs.", event_name)
 
     # ------------------------------------------------------------------
     # Window lifecycle

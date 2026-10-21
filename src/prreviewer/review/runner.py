@@ -64,11 +64,14 @@ class ReviewRunner:
                 if pr.id not in [q[0] for q in self._auto_queue] and pr.id not in self._running:
                     self._auto_queue.append((pr.id, command))
                     logger.info("Review for %s queued (%d running, cap %d).", pr.id, len(self._running), limit)
+            self._store.set_queued(pr.id, True)
             return None
 
         # Kill any previous session for this PR so re-reviews don't leak processes.
         self.stop(pr.id)
         self._running.add(pr.id)
+        with self._queue_lock:
+            self._auto_queue = [q for q in self._auto_queue if q[0] != pr.id]
 
         repo_path = self._git.repo_path_for(pr)
         cwd = str(repo_path) if repo_path else "/tmp"
@@ -201,6 +204,7 @@ class ReviewRunner:
         self.start_review(pr, command=command, auto=True)
 
     def _run_inner(self, pr: PullRequest, pty: PtySession, command: str | None = None, auto: bool = False, resume: bool = False) -> None:
+        self._store.set_queued(pr.id, False)
         self._store.update_status(pr.id, PRStatus.CHECKING_OUT)
 
         worktree_path = self._git.checkout(pr)
