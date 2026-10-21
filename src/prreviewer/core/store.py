@@ -27,6 +27,16 @@ class PRStore:
         logger.info("Stored PR %s (%s)", pr.id, pr.title)
         self._bus.publish(PRUpdated(pr_id=pr.id, status=pr.status))
 
+    def set_queued(self, pr_id: str, queued: bool) -> None:
+        """Mark whether *pr_id* is waiting in the auto-review queue, and emit PRUpdated on change."""
+        with self._lock:
+            pr = self._prs.get(pr_id)
+            if not pr or pr.queued == queued:
+                return
+            pr.queued = queued
+            status = pr.status
+        self._bus.publish(PRUpdated(pr_id=pr_id, status=status))
+
     def update_status(self, pr_id: str, status: PRStatus) -> None:
         """Update the status of an existing PR and emit PRUpdated."""
         with self._lock:

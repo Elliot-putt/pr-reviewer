@@ -91,7 +91,7 @@ REVIEW_COMMAND=/code-review    # Skill run on others' PRs
 ADDRESS_COMMAND=/address-comments  # Skill run on your own PRs with comments
 AUTO_REVIEW=true               # Auto-start review when PR lands (live Slack only; default on)
 SESSION_IDLE_MINUTES=20        # Kill review sessions after this long with no terminal activity (0 = never)
-MAX_CONCURRENT_REVIEWS=2       # Auto-started claude sessions at once — each costs 1-2 GB RAM; extras queue (0 = unlimited)
+MAX_CONCURRENT_REVIEWS=0       # Auto-started claude sessions at once — each costs 1-2 GB RAM; extras queue (0 = unlimited, the default)
 NATIVE_NOTIFICATIONS=true      # Gate all terminal-notifier calls
 AUTO_REPLY=false               # 👍 + resolve confident Addressed/Conceded replies automatically
 AUTO_REREVIEW=false            # Start a re-review automatically once all my threads on a PR are resolved
@@ -253,9 +253,9 @@ Defined by `makeFilters(githubLogin)` in `app-main.jsx`:
 | Tab | Shows |
 |---|---|
 | All | Everything |
-| To Review | Other people's PRs with status: waiting/checkout/reviewing |
+| To Review | Other people's PRs with status: waiting/checkout/reviewing/ready (ready = Claude finished, still needs you) |
 | Needs Attention | Your PRs with status: needs_attention |
-| Done | Any PR with status: ready/posted |
+| Done | Any PR with status: posted, plus your own PRs that are ready |
 
 Default tab on load: **To Review**.
 

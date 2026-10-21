@@ -3,6 +3,7 @@ const { useState, useEffect, useRef } = React;
 
 /* ---------- status vocabulary ---------- */
 const STATUS = {
+  queued:          { label: "Queued for auto-review", short: "Queued",       tone: "gray",   icon: "clock-countdown",    tooltip: "Auto-review is queued behind reviews that are already running — it starts when one closes" },
   waiting:         { label: "Waiting for review",  short: "Waiting",         tone: "yellow", icon: "clock-countdown",    tooltip: "Waiting for you to start a code review" },
   checkout:        { label: "Checking out",        short: "Checking out",    tone: "gray",   icon: "git-branch", spin: true, tooltip: "Checking out the PR branch locally" },
   reviewing:       { label: "Reviewing",           short: "Reviewing",       tone: "blue",   icon: "magnifying-glass", pulse: true, tooltip: "Claude is actively reviewing the code" },
@@ -100,7 +101,7 @@ function PRRow({ pr, active, onClick, density = "regular", badge = "pill", myLog
         )}
       </div>
       <div className="prrow__status">
-        <StatusBadge status={pr.status} treatment={badge} />
+        <StatusBadge status={pr.queued && pr.status === "waiting" ? "queued" : pr.status} treatment={badge} />
       </div>
     </button>
   );

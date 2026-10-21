@@ -28,6 +28,15 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 
+def _already_running(port: int) -> bool:
+    """True if another copy already serves the UI on *port* (a second copy would split Slack events)."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
 def main() -> None:
     """Bootstrap and launch the PR Reviewer app."""
     import time as _time
@@ -54,6 +63,13 @@ def main() -> None:
     from prreviewer.ui.window import AppWindow
 
     settings = Settings()
+    if _already_running(settings.ui_port):
+        logger.error("PR Reviewer is already running (port %d is in use) — not starting a second copy.", settings.ui_port)
+        if settings.native_notifications:
+            from prreviewer.github.poller import _notify
+            _notify(title="PR Reviewer is already running", subtitle="", message="Opening the running copy instead.",
+                    pr_number=0, ui_port=settings.ui_port)
+        sys.exit(1)
     event_bus = EventBus()
     store = PRStore(event_bus)
     replies_store = RepliesStore(event_bus)
@@ -99,7 +115,10 @@ def main() -> None:
 
     # Notify the UI whenever a claude session actually spawns (including
     # queued auto-reviews starting later, and manual/resumed sessions).
-    runner.on_session_started = lambda pr_id: window.push_to_js("real-session-started", {"prId": pr_id})
+    runner.on_session_started = lambda pr_id: threading.Thread(
+        target=window.push_to_js, args=("real-session-started", {"prId": pr_id}), daemon=True,
+        name="session-started-push",
+    ).start()
 
     # Wire store events → JS
     def _on_pr_updated(e: PRUpdated) -> None:
