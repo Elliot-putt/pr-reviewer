@@ -131,10 +131,22 @@ class ReviewRunner:
         Slash commands only resolve from skills inside the repo Claude runs in
         (or ~/.claude). If the target repo has the skill, use the slash command
         directly; otherwise point Claude at the SKILL.md in the skills repo.
+        A command that already contains the PR URL may carry extra instructions
+        on the lines after it; they are appended after the skill prompt.
         """
+        cmd = cmd.strip()
+        extra = ""
+        if pr_url in cmd:
+            first, _, extra = cmd.partition("\n")
+            cmd = first.replace(pr_url, "").strip()
+            extra = extra.strip()
+        prompt = self._skill_prompt(cmd, pr_url, cwd)
+        return f"{prompt}\n\n{extra}" if extra else prompt
+
+    def _skill_prompt(self, cmd: str, pr_url: str, cwd: str) -> str:
+        """Resolve *cmd* to a slash command or a pointer at the skill file in the skills repo."""
         from pathlib import Path
 
-        cmd = cmd.strip()
         skill_name = cmd.lstrip("/").split()[0] if cmd.startswith("/") else ""
         if not skill_name:
             return f"{cmd} {pr_url}"

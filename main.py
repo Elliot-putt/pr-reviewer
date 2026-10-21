@@ -39,6 +39,7 @@ def main() -> None:
     from prreviewer.config import Settings
     from prreviewer.core.events import EventBus, PRDetected, PRUpdated, ReplyUpdated
     from prreviewer.core.store import PRStore
+    from prreviewer.models import PRStatus
     from prreviewer.github.client import GitHubClient
     from prreviewer.github.pull_requests import PullRequestService
     from prreviewer.github.reviews import ReviewPublisher
@@ -47,7 +48,8 @@ def main() -> None:
     from prreviewer.slack.listener import SlackListener
     from prreviewer.slack.parser import PRLinkParser
     from prreviewer.github.poller import PRPoller
-    from prreviewer.github.replies import RepliesPoller, RepliesStore
+    from prreviewer.github.replies import RepliesPoller, RepliesStore, ReplyActions
+    from prreviewer.review.verdict import VerdictWorker
     from prreviewer.ui.server import UiServer
     from prreviewer.ui.window import AppWindow
 
@@ -59,7 +61,7 @@ def main() -> None:
     github_client = GitHubClient(settings)
     pr_service = PullRequestService(github_client)
     review_publisher = ReviewPublisher(github_client)
-    git_repo = GitRepo(settings)
+    git_repo = GitRepo(settings, login_fn=github_client.get_login)
 
     ui_server = UiServer(port=settings.ui_port, asset_dir=_asset_dir())
     ui_server.run_in_thread()
@@ -110,13 +112,18 @@ def main() -> None:
         if not window.listening:
             logger.info("Listening paused — ignoring PR %s.", e.ref)
             return
+        existing = store.get(f"pr-{e.ref.repo}-{e.ref.number}")
         pr = pr_service.fetch(e.ref, detected_at=e.slack_ts)
         if pr is None:
+            return
+        if existing is not None:
+            if pr.status in (PRStatus.MERGED, PRStatus.CLOSED) and existing.status != pr.status:
+                store.update_status(existing.id, pr.status)
             return
         store.add(pr)
         window.push_to_js("pr-detected", pr.to_dict())
 
-        is_live = e.slack_ts > _startup_time
+        is_live = e.slack_ts > _startup_time and (not e.from_backfill or e.catch_up)
         my_login = github_client.get_login()
         is_others_pr = not my_login or pr.author != my_login
 
@@ -133,7 +140,7 @@ def main() -> None:
 
         # Auto-review: start Claude Code immediately in the background.
         # Never auto-review on backfill/refresh — only on live Slack socket events.
-        if is_live and is_others_pr and settings.auto_review and not e.from_backfill:
+        if is_live and is_others_pr and settings.auto_review:
             try:
                 # The runner's on_session_started callback notifies the UI when a
                 # session actually spawns — including queued ones starting later.
@@ -146,7 +153,8 @@ def main() -> None:
 
     def _on_reply_updated(e: ReplyUpdated) -> None:
         item = replies_store.item_js(e.thread_id) if e.thread_id else None
-        window.push_to_js("reply-updated", {"item": item, "error": replies_store.error})
+        window.push_to_js("reply-updated", {"item": item, "error": replies_store.error,
+                                            "claudeError": replies_store.claude_error})
 
     event_bus.subscribe(ReplyUpdated, _on_reply_updated)
 
@@ -167,8 +175,8 @@ def main() -> None:
         if listener:
             logger.info("Starting backfill of last 25 Slack messages…")
             window.push_to_js("backfill-start", {})
-            listener.backfill(limit=25)
-            window.push_to_js("backfill-done", {})
+            error = listener.backfill(limit=25)
+            window.push_to_js("backfill-done", {"error": error})
 
     threading.Thread(target=_backfill_after_ready, daemon=True, name="backfill").start()
 
@@ -201,7 +209,31 @@ def main() -> None:
     )
     poller.start()
 
-    RepliesPoller(settings=settings, github_client=github_client, store=replies_store).start()
+    reply_actions = ReplyActions(settings=settings, github_client=github_client, store=replies_store)
+
+    def _on_rereview_due(pr_key: str) -> None:
+        if settings.auto_rereview:
+            threading.Thread(target=window.run_rereview, args=(pr_key, True), daemon=True,
+                             name="auto-rereview").start()
+
+    replies_store.on_rereview = _on_rereview_due
+    verdict_worker = VerdictWorker(settings=settings, github_client=github_client, store=replies_store,
+                                   git_repo=git_repo, actions=reply_actions)
+    window._verdict_worker = verdict_worker
+    window._reply_actions = reply_actions
+    verdict_worker.start()
+    verdict_worker.enqueue_open()
+
+    def _notify_replies(count: int) -> None:
+        if not settings.native_notifications:
+            return
+        from prreviewer.github.poller import _notify
+        noun = "reply" if count == 1 else "replies"
+        _notify(title="Replies", subtitle="", message=f"{count} new {noun} to your review comments",
+                pr_number=0, ui_port=settings.ui_port, query="view=replies")
+
+    RepliesPoller(settings=settings, github_client=github_client, store=replies_store,
+                  on_checked=verdict_worker.enqueue, notify=_notify_replies).start()
 
     logger.info("Launching window on http://127.0.0.1:%d/", settings.ui_port)
     window.start()

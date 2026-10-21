@@ -7,3 +7,6 @@ uv.lock
 build/
 dist/
 build_res/icon.iconset/
+replies.json
+replies.json.tmp
+replies-calibration.jsonl

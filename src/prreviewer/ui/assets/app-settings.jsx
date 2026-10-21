@@ -105,6 +105,9 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
     addressCommand: "",
     skillsRepo:     "",
     sessionIdleMinutes: "",
+    repliesPollSeconds: "",
+    repliesModel:   "",
+    autoReplyConfidence: "",
   });
   const [loaded, setLoaded] = useStateS(false);
   const [githubConnected, setGithubConnected] = useStateS(false);
@@ -115,6 +118,10 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
   const [connectErr, setConnectErr] = useStateS("");
   const [autoReview, setAutoReview] = useStateS(false);
   const [nativeNotifications, setNativeNotifications] = useStateS(true);
+  const [repliesEnabled, setRepliesEnabled] = useStateS(true);
+  const [repliesError, setRepliesError] = useStateS("");
+  const [autoReply, setAutoReply] = useStateS(false);
+  const [autoRereview, setAutoRereview] = useStateS(false);
   const origFields = useRefS({});  // last-loaded values, to detect edited token masks
   const [appVersion, setAppVersion] = useStateS("");
   const [updCheck, setUpdCheck] = useStateS(null);  // null | "checking" | "latest" | "error"
@@ -138,7 +145,14 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
       addressCommand: cfg.addressCommand || "",
       skillsRepo:     cfg.skillsRepo     || "",
       sessionIdleMinutes: cfg.sessionIdleMinutes != null ? String(cfg.sessionIdleMinutes) : "",
+      repliesPollSeconds: cfg.repliesPollSeconds != null ? String(cfg.repliesPollSeconds) : "",
+      repliesModel:   cfg.repliesModel != null ? cfg.repliesModel : "sonnet",
+      autoReplyConfidence: cfg.autoReplyConfidence != null ? String(Math.round(cfg.autoReplyConfidence * 100)) : "85",
     });
+    setAutoReply(!!cfg.autoReply);
+    setAutoRereview(!!cfg.autoRereview);
+    setRepliesEnabled(cfg.repliesEnabled !== false);
+    setRepliesError(cfg.repliesError || "");
     if (cfg.appVersion) setAppVersion(cfg.appVersion);
     setAutoReview(!!cfg.autoReview);
     setNativeNotifications(cfg.nativeNotifications !== false);
@@ -202,6 +216,10 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
     // Always include booleans
     payload.autoReview = autoReview;
     payload.nativeNotifications = nativeNotifications;
+    payload.repliesEnabled = repliesEnabled;
+    payload.autoReply = autoReply;
+    payload.autoRereview = autoRereview;
+    if (payload.autoReplyConfidence) payload.autoReplyConfidence = String(Math.min(100, Math.max(50, Number(payload.autoReplyConfidence))) / 100);
 
     window.__pyApi.saveSettings(payload)
       .then(res => {
@@ -468,6 +486,69 @@ function SettingsView({ listening, setListening, slackConnected, setSlackConnect
               onChange={v => { setAutoReview(v); window.__pyApi.saveSettings({ autoReview: v }).catch(() => {}); }}
               label="Auto-review on new PR"
               desc="Start the code review immediately when a PR lands — it runs in the background so it's ready when you open it."
+            />
+          </div>
+        </section>
+
+        <section className="setsec">
+          <div className="setsec__hd">
+            <Icon name="chat-circle-dots" />
+            <div><div className="setsec__ttl">Replies</div><div className="setsec__sub">Replies to review comments you left on other people's PRs, checked by Claude Code</div></div>
+          </div>
+          <div className="setsec__body">
+            {repliesError && <div className="setsec__err"><Icon name="warning" /> {repliesError} Fine-grained tokens can't read notifications.</div>}
+            <Field label="Check every (seconds)" hint="GitHub may ask for longer">
+              <input
+                className="inp mono"
+                type="text"
+                value={fields.repliesPollSeconds}
+                onChange={e => setField("repliesPollSeconds", e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="60"
+              />
+            </Field>
+            <Field label="Auto reply threshold (%)" hint="50–100">
+              <input
+                className="inp mono"
+                type="text"
+                value={fields.autoReplyConfidence}
+                onChange={e => setField("autoReplyConfidence", e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                placeholder="85"
+              />
+            </Field>
+            <Field label="Verdict model" hint="claude -p on your subscription">
+              <select
+                className="inp mono"
+                value={fields.repliesModel}
+                onChange={e => setField("repliesModel", e.target.value)}
+              >
+                <option value="sonnet">sonnet — fast, good judgement</option>
+                <option value="opus">opus — most careful</option>
+                <option value="haiku">haiku — fastest, cheapest on limits</option>
+                <option value="">CLI default</option>
+                {!["sonnet", "opus", "haiku", ""].includes(fields.repliesModel) && (
+                  <option value={fields.repliesModel}>{fields.repliesModel} (custom)</option>
+                )}
+              </select>
+            </Field>
+          </div>
+          <div className="setsec__rows">
+            <Toggle
+              on={repliesEnabled}
+              onChange={v => { setRepliesEnabled(v); window.__pyApi.saveSettings({ repliesEnabled: v }).catch(() => {}); }}
+              label="Watch replies"
+              desc="Check GitHub for replies to your review threads and get a verdict on each."
+            />
+            <Toggle
+              on={autoReply}
+              onChange={v => { setAutoReply(v); window.__pyApi.saveSettings({ autoReply: v }).catch(() => {}); }}
+              label="Auto reply"
+              desc="👍 + resolve threads Claude is confident were addressed (or where their pushback is fair), with Undo. Partial or 'your point stands' verdicts always wait for you."
+            />
+            <Toggle
+              on={autoRereview}
+              onChange={v => { setAutoRereview(v); window.__pyApi.saveSettings({ autoRereview: v }).catch(() => {}); }}
+              label="Auto re-review"
+              desc="When all your threads on a PR are resolved and there are new commits, start the re-review automatically (it queues behind other reviews). Off: the PR shows a Re-review button."
             />
           </div>
         </section>

@@ -198,6 +198,8 @@ function BridgedApp() {
   const [view, setView] = useStateBr(() => new URLSearchParams(window.location.search).get("view") === "replies" ? "replies" : "inbox");
   const [replies, setReplies] = useStateBr([]);
   const [repliesError, setRepliesError] = useStateBr("");
+  const [claudeError, setClaudeError] = useStateBr("");
+  const [repliesLoaded, setRepliesLoaded] = useStateBr(false);
   // Start with seed data; swap to empty once we know we're in real (configured) mode.
   // Start empty — real PRs arrive from Python; demo data is only seeded if the
   // app turns out to be unconfigured (prevents dummy rows flashing on startup).
@@ -219,6 +221,7 @@ function BridgedApp() {
   const [wsPort, setWsPort] = useStateBr(8766);
   const [realSessions, setRealSessions] = useStateBr({}); // prId -> bool (has live PTY)
   const [backfilling, setBackfilling] = useStateBr(false);
+  const [backfillError, setBackfillError] = useStateBr("");
   const [lastRefreshed, setLastRefreshed] = useStateBr(null);
   const [updateInfo, setUpdateInfo] = useStateBr(null);  // {latest, url} from Python update check
   const [appVersion, setAppVersion] = useStateBr("");
@@ -257,7 +260,9 @@ function BridgedApp() {
         window.__pyApi.getReplies().then(res => {
           if (!res) return;
           setReplies(res.items || []);
+          setRepliesLoaded(true);
           setRepliesError(res.error || "");
+          setClaudeError(res.claudeError || "");
         }).catch(() => {});
         if (cfg.isConfigured) {
           setIsConfigured(true);
@@ -284,8 +289,9 @@ function BridgedApp() {
 
     // Backfill lifecycle banners from Python
     function onBackfillStart() { setBackfilling(true); }
-    function onBackfillDone() {
+    function onBackfillDone(e) {
       setBackfilling(false);
+      setBackfillError((e && e.detail && e.detail.error) || "");
       setLastRefreshed(new Date());
       window.__pyApi.getPrs().then(livePrs => {
         const visible = (livePrs || []).filter(p => p.status !== "merged" && p.status !== "closed");
@@ -294,9 +300,24 @@ function BridgedApp() {
     }
     window.addEventListener('backfill-start', onBackfillStart);
     window.addEventListener('backfill-done', onBackfillDone);
+    function resync() {
+      if (!(window.pywebview && window.pywebview.api)) return;
+      window.__pyApi.getPrs().then(livePrs => {
+        const visible = (livePrs || []).filter(p => p.status !== "merged" && p.status !== "closed");
+        setPrs(prev => {
+          const known = new Map(prev.map(p => [p.id, p]));
+          return visible.map(p => known.has(p.id) ? { ...known.get(p.id), ...p } : { ...p, isNew: true });
+        });
+        setTimeout(() => setPrs(prev => prev.map(p => p.isNew ? { ...p, isNew: false } : p)), 1800);
+      }).catch(() => {});
+    }
+    window.addEventListener('focus', resync);
+    const resyncTimer = setInterval(resync, 30000);
     return () => {
       window.removeEventListener('backfill-start', onBackfillStart);
       window.removeEventListener('backfill-done', onBackfillDone);
+      window.removeEventListener('focus', resync);
+      clearInterval(resyncTimer);
     };
   }, []);
 
@@ -337,6 +358,7 @@ function BridgedApp() {
     function onReplyUpdated(e) {
       const d = e.detail || {};
       setRepliesError(d.error || "");
+      setClaudeError(d.claudeError || "");
       const item = d.item;
       if (!item || !item.id) return;
       setReplies(prev => prev.some(r => r.id === item.id)
@@ -634,6 +656,9 @@ function BridgedApp() {
                     <div className="filter__desc">{filters.find(f => f.id === filter).tooltip}</div>
                   )}
                 </div>
+                {!backfilling && backfillError && (
+                  <div className="inbox__slackerr"><Icon name="warning" /> {backfillError}</div>
+                )}
                 {backfilling && (
                   <div className="inbox__backfill">
                     <Spinner size={13} color="var(--color-primary-600)" />
@@ -678,7 +703,31 @@ function BridgedApp() {
               />
             </>
           ) : view === "replies" ? (
-            <RepliesView replies={replies} error={repliesError} />
+            <RepliesView replies={replies} error={repliesError} claudeError={claudeError} loading={!repliesLoaded}
+              onAction={(action, id, body) => {
+                if (action === "show") {
+                  setFilter("all");
+                  setSelectedId(id);
+                  setView("inbox");
+                  return Promise.resolve({ ok: true });
+                }
+                if (action === "terminal" || action === "rereview") {
+                  return window.__pyApi.replyAction(action, id).then(res => {
+                    if (!res || !res.ok) return res;
+                    updateSession(res.prId, { lines: [], running: true, comments: [], revealCount: 0, posted: false, decision: null });
+                    setRealSessions(prev => ({ ...prev, [res.prId]: true }));
+                    setFilter("all");
+                    setSelectedId(res.prId);
+                    setView("inbox");
+                    return res;
+                  });
+                }
+                return window.__pyApi.replyAction(action, id, body);
+              }}
+              onRecheck={id => {
+                setReplies(prev => prev.map(r => r.id === id ? { ...r, verdict: null, note: "", status: "pending" } : r));
+                window.__pyApi.recheckReply(id).catch(err => console.error("recheck_reply failed:", err));
+              }} />
           ) : (
             <SettingsView listening={listening} setListening={toggleListening} slackConnected={slackConnected} setSlackConnected={setSlackConnected} />
           )}

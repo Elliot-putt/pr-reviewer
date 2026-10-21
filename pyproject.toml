@@ -16,10 +16,14 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff", "mypy"]
+dev = ["ruff", "mypy", "pytest"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [build-system]
 requires = ["hatchling"]

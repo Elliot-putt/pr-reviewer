@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,9 @@ if TYPE_CHECKING:
     from prreviewer.ui.server import UiServer
 
 logger = logging.getLogger(__name__)
+
+CHANNEL_CACHE_SECONDS = 600
+MAX_CHANNEL_PAGES = 60
 
 # Absolute path to the .env file (repo root, or Application Support when bundled)
 _ENV_PATH = env_path()
@@ -61,6 +65,23 @@ def _write_env(path: Path, data: dict[str, str]) -> None:
     path.write_text("\n".join(out) + "\n")
 
 
+def _thread_prompt(item: dict) -> str:
+    """Prompt for a terminal session about one review thread (the runner appends the PR URL)."""
+    def clip(text: str) -> str:
+        text = (text or "").strip()
+        return text if len(text) <= 1500 else text[:1500] + " …"
+
+    mine = "\n\n".join(clip(t) for t in item.get("mine", []))
+    theirs = "\n\n".join(clip(t) for t in item.get("theirs", []))
+    where = f"{item.get('path', '')}:{item.get('line') or ''}"
+    return (
+        f"Look at review thread {item.get('thread_url', '')} ({where}). "
+        f"My comment: {mine} "
+        f"Their reply: {theirs} "
+        "Check the current code and help me decide how to respond. Don't post anything to GitHub. PR:"
+    )
+
+
 def _mask(val: str) -> str:
     """First 8 chars + bullets, or '' if empty."""
     if not val:
@@ -92,11 +113,14 @@ class AppWindow:
         self._runner = runner
         self._github_client = github_client
         self._replies_store = replies_store
+        self._verdict_worker = None
+        self._reply_actions = None
         self._window = None
         self._slack_listener = None
         self._slack_lock = threading.Lock()
         self.listening = settings.listening  # toggled from JS to pause event processing; persisted in .env
         self._channel_names: dict[str, str] = {}  # channel id -> resolved name (cached)
+        self._channel_cache: tuple[str, float, list] | None = None
 
     # ------------------------------------------------------------------
     # Helpers
@@ -128,6 +152,13 @@ class AppWindow:
             "nativeNotifications":  s.native_notifications,
             "skillsRepo":           s.skills_repo,
             "sessionIdleMinutes":   s.session_idle_minutes,
+            "repliesEnabled":       s.replies_enabled,
+            "repliesPollSeconds":   s.replies_poll_seconds,
+            "repliesModel":         s.replies_model,
+            "autoReply":            s.auto_reply,
+            "autoRereview":         s.auto_rereview,
+            "autoReplyConfidence":  s.auto_reply_confidence,
+            "repliesError":         self._replies_store.error if self._replies_store else "",
             "githubLogin":          github_login,
         }
 
@@ -180,6 +211,13 @@ class AppWindow:
         except ValueError:
             pass
         s.replies_enabled = env.get("REPLIES_ENABLED", "true" if s.replies_enabled else "false") == "true"
+        s.replies_model = env.get("REPLIES_MODEL", s.replies_model)
+        s.auto_reply = env.get("AUTO_REPLY", "true" if s.auto_reply else "false") == "true"
+        s.auto_rereview = env.get("AUTO_REREVIEW", "true" if s.auto_rereview else "false") == "true"
+        try:
+            s.auto_reply_confidence = min(max(float(env.get("AUTO_REPLY_CONFIDENCE", s.auto_reply_confidence)), 0.5), 1.0)
+        except ValueError:
+            pass
         try:
             s.replies_poll_seconds = int(env.get("REPLIES_POLL_SECONDS", s.replies_poll_seconds))
         except ValueError:
@@ -214,10 +252,16 @@ class AppWindow:
             "nativeNotifications": "NATIVE_NOTIFICATIONS",
             "skillsRepo":          "SKILLS_REPO",
             "sessionIdleMinutes":  "SESSION_IDLE_MINUTES",
+            "repliesEnabled":      "REPLIES_ENABLED",
+            "repliesPollSeconds":  "REPLIES_POLL_SECONDS",
+            "repliesModel":        "REPLIES_MODEL",
+            "autoReply":           "AUTO_REPLY",
+            "autoRereview":        "AUTO_REREVIEW",
+            "autoReplyConfidence": "AUTO_REPLY_CONFIDENCE",
         }
 
         # Boolean toggles — always write if present in payload
-        bool_keys = {"autoReview", "nativeNotifications"}
+        bool_keys = {"autoReview", "nativeNotifications", "repliesEnabled", "autoReply", "autoRereview"}
         # Tokens are shown masked; a value still containing bullets means
         # "unchanged" (or a broken edit of the mask) and must never be written.
         changed = 0
@@ -420,12 +464,14 @@ class AppWindow:
 
     def _run_backfill(self) -> None:
         self.push_to_js("backfill-start", {})
+        error = ""
         try:
-            self._slack_listener.backfill(limit=25)
+            error = self._slack_listener.backfill(limit=25)
         except Exception:
             logger.exception("Manual backfill failed.")
+            error = "Refresh failed — see the log."
         finally:
-            self.push_to_js("backfill-done", {})
+            self.push_to_js("backfill-done", {"error": error})
 
     def set_listening(self, value: bool) -> dict:
         """Pause or resume Slack event processing without disconnecting. Persisted."""
@@ -445,9 +491,14 @@ class AppWindow:
         token = self._settings.slack_bot_token
         if not token:
             return {"ok": False, "error": "Bot token not set — save it first."}
+        cached = self._channel_cache
+        if cached and cached[0] == token and time.time() - cached[1] < CHANNEL_CACHE_SECONDS:
+            return {"ok": True, "channels": cached[2]}
         try:
             from slack_sdk import WebClient
+            from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
             client = WebClient(token=token)
+            client.retry_handlers.append(RateLimitErrorRetryHandler(max_retry_count=3))
             # Private channels need the groups:read scope; fall back to public-only
             # if the combined request is rejected.
             types = "public_channel,private_channel"
@@ -485,7 +536,7 @@ class AppWindow:
                 logger.debug("users_conversations failed; relying on conversations_list only.")
 
             cursor = None
-            for _ in range(10):  # up to 10 pages × 1000 channels
+            for _ in range(MAX_CHANNEL_PAGES):
                 resp = client.conversations_list(
                     types=types,
                     exclude_archived=True,
@@ -501,6 +552,7 @@ class AppWindow:
 
             channels = sorted(by_id.values(), key=lambda c: (not c["isMember"], c["name"]))
             logger.info("Channel picker: %d channels (%d bot-member).", len(channels), sum(1 for c in channels if c["isMember"]))
+            self._channel_cache = (token, time.time(), channels)
             return {"ok": True, "channels": channels}
         except Exception as exc:
             logger.exception("list_slack_channels failed.")
@@ -613,8 +665,124 @@ class AppWindow:
         return {
             "items": self._replies_store.list_js(),
             "error": self._replies_store.error,
+            "claudeError": self._replies_store.claude_error,
             "enabled": self._settings.replies_enabled,
         }
+
+    def _start_reply_action(self, action: str, thread_id: str, body: str = "") -> dict:
+        if self._reply_actions is None:
+            return {"ok": False, "error": "Replies not running"}
+        threading.Thread(target=self._reply_actions.run, args=(action, thread_id, body),
+                         daemon=True, name=f"reply-{action}").start()
+        return {"ok": True}
+
+    def resolve_reply(self, thread_id: str) -> dict:
+        """👍 the latest reply and resolve the thread on GitHub (runs in the background)."""
+        return self._start_reply_action("resolve", thread_id)
+
+    def send_reply(self, thread_id: str, body: str, resolve: bool = False) -> dict:
+        """Post *body* as a reply in the thread, optionally resolving it (runs in the background)."""
+        return self._start_reply_action("reply_resolve" if resolve else "reply", thread_id, body or "")
+
+    def undo_reply(self, thread_id: str) -> dict:
+        """Reverse an Auto reply resolve (unresolve + remove the 👍), in the background."""
+        return self._start_reply_action("undo", thread_id)
+
+    def dismiss_reply(self, thread_id: str) -> dict:
+        """Hide a reply item locally without touching GitHub."""
+        return self._start_reply_action("dismiss", thread_id)
+
+    def open_reply_terminal(self, thread_id: str) -> dict:
+        """Open a Claude Code session in the PR's worktree to talk through one thread."""
+        item = self._replies_store.get(thread_id) if self._replies_store else None
+        if not item:
+            return {"ok": False, "error": f"Unknown reply: {thread_id}"}
+        owner_repo, _, number = item["pr"].partition("#")
+        owner, repo = owner_repo.split("/", 1)
+        pr_id = f"pr-{repo}-{number}"
+        threading.Thread(target=self._open_reply_terminal, args=(item, owner, repo, int(number), pr_id),
+                         daemon=True, name="reply-terminal").start()
+        return {"ok": True, "prId": pr_id}
+
+    def _open_reply_terminal(self, item: dict, owner: str, repo: str, number: int, pr_id: str) -> None:
+        from prreviewer.models import PRRef
+
+        try:
+            pr = self._store.get(pr_id)
+            if pr is None:
+                pr = self._pr_service.fetch(PRRef(owner=owner, repo=repo, number=number))
+                if pr is None:
+                    return
+                self._store.add(pr)
+                self.push_to_js("pr-detected", pr.to_dict())
+            self._runner.start_review(pr, command=_thread_prompt(item))
+        except Exception:
+            logger.exception("open_reply_terminal failed for %s.", pr_id)
+
+    def start_rereview(self, pr_key: str) -> dict:
+        """Start a re-review for a PR whose threads are all resolved (runs in the background)."""
+        if self._replies_store is None:
+            return {"ok": False, "error": "Replies not running"}
+        owner_repo, _, number = pr_key.partition("#")
+        if not number:
+            return {"ok": False, "error": f"Unknown PR: {pr_key}"}
+        repo = owner_repo.split("/", 1)[-1]
+        threading.Thread(target=self.run_rereview, args=(pr_key, False), daemon=True, name="rereview").start()
+        return {"ok": True, "prId": f"pr-{repo}-{number}"}
+
+    def run_rereview(self, pr_key: str, auto: bool) -> None:
+        """Hand the PR to the review runner with a re-review prompt. Background threads only."""
+        from prreviewer.github.replies import rereview_prompt
+        from prreviewer.models import PRRef, PRStatus
+
+        try:
+            state = self._replies_store.pr_state(pr_key)
+            owner_repo, _, number = pr_key.partition("#")
+            owner, repo = owner_repo.split("/", 1)
+            pr_url = f"https://github.com/{owner}/{repo}/pull/{number}"
+            since, head = state.get("my_last_review_sha", ""), state.get("head_sha", "")
+            prompt = rereview_prompt(self._settings.review_command or "/code-review", pr_url, since,
+                                     self._commit_reachable(owner, repo, since, head))
+            pr_id = f"pr-{repo}-{number}"
+            pr = self._store.get(pr_id)
+            if pr is None:
+                pr = self._pr_service.fetch(PRRef(owner=owner, repo=repo, number=int(number)))
+                if pr is None:
+                    return
+                self._store.add(pr)
+                self.push_to_js("pr-detected", pr.to_dict())
+            self._store.update_status(pr.id, PRStatus.WAITING)
+            self._replies_store.update_pr(pr_key, rereview="running", rereviewed_sha=head)
+            self._replies_store.save()
+            self._replies_store.touch_pr(pr_key)
+            logger.info("Starting re-review of %s (auto=%s, since %s).", pr_key, auto, since[:10])
+            self._runner.start_review(pr, command=prompt, auto=auto)
+        except Exception:
+            logger.exception("Re-review failed to start for %s.", pr_key)
+
+    def _commit_reachable(self, owner: str, repo: str, base: str, head: str) -> bool:
+        """Whether base...head can be compared on GitHub (False after a rebase dropped *base*)."""
+        if not base or not head or not self._settings.github_token:
+            return False
+        import requests
+
+        try:
+            resp = requests.get(f"https://api.github.com/repos/{owner}/{repo}/compare/{base}...{head}",
+                                headers={"Authorization": f"Bearer {self._settings.github_token}",
+                                         "Accept": "application/vnd.github+json"}, timeout=20)
+            return resp.status_code == 200 and resp.json().get("status") != "diverged"
+        except requests.RequestException:
+            return False
+
+    def recheck_reply(self, thread_id: str) -> dict:
+        """Queue a fresh verdict for one reply item. The worker thread resets it and pushes updates."""
+        if self._replies_store is None or self._verdict_worker is None:
+            return {"ok": False, "error": "Replies not running"}
+        item = self._replies_store.get(thread_id)
+        if not item:
+            return {"ok": False, "error": f"Unknown reply: {thread_id}"}
+        self._verdict_worker.enqueue(item["pr"], force={thread_id})
+        return {"ok": True}
 
     # ------------------------------------------------------------------
     # Push events to JS
@@ -629,7 +797,7 @@ class AppWindow:
         try:
             self._window.evaluate_js(js)
         except Exception:
-            logger.debug("push_to_js failed (window may be closing).")
+            logger.warning("push_to_js(%s) failed — the screen may be out of date until it resyncs.", event_name)
 
     # ------------------------------------------------------------------
     # Window lifecycle

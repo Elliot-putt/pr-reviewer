@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     replies_model: str = "sonnet"
     replies_max_concurrent: int = 1
     auto_reply: bool = False
+    auto_rereview: bool = False
     auto_reply_confidence: float = 0.85
 
     # Absolute path so settings load correctly no matter which directory the

@@ -93,6 +93,8 @@ AUTO_REVIEW=true               # Auto-start review when PR lands (live Slack onl
 SESSION_IDLE_MINUTES=20        # Kill review sessions after this long with no terminal activity (0 = never)
 MAX_CONCURRENT_REVIEWS=2       # Auto-started claude sessions at once — each costs 1-2 GB RAM; extras queue (0 = unlimited)
 NATIVE_NOTIFICATIONS=true      # Gate all terminal-notifier calls
+AUTO_REPLY=false               # 👍 + resolve confident Addressed/Conceded replies automatically
+AUTO_REREVIEW=false            # Start a re-review automatically once all my threads on a PR are resolved
 ```
 
 ---

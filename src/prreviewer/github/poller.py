@@ -23,8 +23,8 @@ def _esc(value: str) -> str:
     return f"\\{value}" if value and value[0] in "[-" else value
 
 
-def _notify(title: str, subtitle: str, message: str, pr_number: int, ui_port: int) -> None:
-    url = f"http://127.0.0.1:{ui_port}/?pr={pr_number}"
+def _notify(title: str, subtitle: str, message: str, pr_number: int, ui_port: int, query: str = "") -> None:
+    url = f"http://127.0.0.1:{ui_port}/?{query or f'pr={pr_number}'}"
     title, subtitle, message = _esc(title), _esc(subtitle), _esc(message)
     try:
         subprocess.run(

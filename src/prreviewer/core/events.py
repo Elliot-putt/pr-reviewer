@@ -23,6 +23,7 @@ class PRDetected:
     ref: PRRef
     slack_ts: float = 0.0  # Unix timestamp from the Slack message (0 = unknown)
     from_backfill: bool = False  # True when emitted by backfill/refresh, never triggers auto-review
+    catch_up: bool = False  # Backfill after a Slack reconnect/wake: treated as live if the app hadn't seen it
 
     def to_dict(self) -> dict:
         return {"owner": self.ref.owner, "repo": self.ref.repo, "number": self.ref.number}

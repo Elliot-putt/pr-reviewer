@@ -95,10 +95,11 @@ class GitHubClient:
         )
         return sum(1 for n in nodes if not n["isResolved"])
 
-    def graphql(self, query: str, variables: dict) -> dict:
+    def graphql(self, query: str, variables: dict, strict: bool = False) -> dict:
         """Run a GraphQL query and return its ``data`` object.
 
         Raises on HTTP errors, and on GraphQL errors when no data came back.
+        With *strict* (used for mutations) any GraphQL error raises.
         """
         import requests
         resp = requests.post(
@@ -113,6 +114,8 @@ class GitHubClient:
         resp.raise_for_status()
         body = resp.json()
         data = body.get("data")
-        if data is None:
-            raise RuntimeError(f"GraphQL error: {body.get('errors')}")
+        errors = body.get("errors")
+        if data is None or (strict and errors):
+            messages = "; ".join(e.get("message", str(e)) for e in errors or []) or "no data"
+            raise RuntimeError(f"GitHub: {messages}")
         return data

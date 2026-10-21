@@ -108,6 +108,24 @@
       }
       return Promise.resolve([]);
     },
+    replyAction: function(action, threadId, body) {
+      if (!(window.pywebview && window.pywebview.api)) return Promise.resolve({ ok: false, error: 'pywebview not available' });
+      var api = window.pywebview.api;
+      if (action === 'resolve') return api.resolve_reply(threadId);
+      if (action === 'dismiss') return api.dismiss_reply(threadId);
+      if (action === 'undo') return api.undo_reply(threadId);
+      if (action === 'reply') return api.send_reply(threadId, body || '', false);
+      if (action === 'reply_resolve') return api.send_reply(threadId, body || '', true);
+      if (action === 'terminal') return api.open_reply_terminal(threadId);
+      if (action === 'rereview') return api.start_rereview(threadId);
+      return Promise.resolve({ ok: false, error: 'unknown action' });
+    },
+    recheckReply: function(threadId) {
+      if (window.pywebview && window.pywebview.api) {
+        return window.pywebview.api.recheck_reply(threadId);
+      }
+      return Promise.resolve({ ok: false, error: 'pywebview not available' });
+    },
     getReplies: function() {
       if (window.pywebview && window.pywebview.api) {
         return window.pywebview.api.get_replies();
